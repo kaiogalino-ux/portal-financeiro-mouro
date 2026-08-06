@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.*.local
+
+# Relatórios gerados contêm dados financeiros reais da empresa — nunca versionar.
+relatorios/
+~$*.xlsx

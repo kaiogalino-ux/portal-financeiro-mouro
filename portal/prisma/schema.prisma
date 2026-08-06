@@ -1,0 +1,617 @@
+// Portal Financeiro — Mouro Soluções
+// Modelo inicial (primeira entrega). Ver plano em:
+// C:\Users\kaio.Pereira\.claude\plans\humming-painting-cosmos.md para o
+// racional de cada decisão (Titulo unificado, status computado, etc).
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+// ---------------------------------------------------------------------------
+// Autenticação (Auth.js / NextAuth v5 + @auth/prisma-adapter)
+// O adapter espera os nomes de modelo padrão (User/Account/Session/
+// VerificationToken) para gerar `prisma.user`, `prisma.session`, etc. — por
+// isso o nome do modelo fica em inglês, mas a tabela física e os campos de
+// domínio (role, ativo) seguem o padrão do projeto.
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMINISTRADOR
+  FINANCEIRO
+  CONTABILIDADE
+  DIRETORIA
+  VISUALIZADOR
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String
+  role          Role      @default(VISUALIZADOR)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  syncRuns        SyncRun[]
+  auditLogs       AuditLog[]
+  impostosCriados     Imposto[] @relation("ImpostoCriadoPor")
+  impostosConfirmados Imposto[] @relation("ImpostoConfirmadoPor")
+
+  @@map("usuarios")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("auth_accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("auth_verification_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Enums de domínio
+// ---------------------------------------------------------------------------
+
+enum TituloTipo {
+  PAGAR
+  RECEBER
+}
+
+// Status é calculado sob demanda (ver src/server/finance/tituloStatus.ts) a
+// partir de liquidado/dataVencimento/dataLiquidacao/dataCompetencia — este
+// enum existe só para o valor computado e para status de Imposto/Nota.
+enum TituloStatus {
+  PREVISTO
+  REALIZADO
+  VENCIDO
+  CANCELADO
+}
+
+enum EntidadeTipo {
+  CLIENTE
+  FORNECEDOR
+  TRANSPORTADORA
+  FUNCIONARIO
+  OUTROS
+}
+
+enum CategoriaTipo {
+  RECEITA
+  DESPESA
+}
+
+enum ImpostoSituacao {
+  ESTIMADO
+  CONFIRMADO
+  PAGO
+  CANCELADO
+}
+
+enum SyncTrigger {
+  MANUAL
+  AGENDADO
+}
+
+enum SyncRunStatus {
+  PENDENTE
+  EM_EXECUCAO
+  SUCESSO
+  PARCIAL
+  FALHOU
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+enum AuditActorType {
+  USUARIO
+  SINCRONIZACAO
+}
+
+enum StatusConciliacao {
+  PENDENTE
+  CONCILIADO
+}
+
+// ---------------------------------------------------------------------------
+// Empresa (suporta múltiplos CNPJs — usado no filtro global "Empresa/CNPJ")
+// ---------------------------------------------------------------------------
+
+model Empresa {
+  id           String   @id @default(cuid())
+  cnpj         String   @unique
+  razaoSocial  String
+  nomeFantasia String?
+  ativo        Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  clientes        Cliente[]
+  fornecedores    Fornecedor[]
+  transportadoras Transportadora[]
+  categorias      CategoriaFinanceira[]
+  centrosCusto    CentroCusto[]
+  formasPagamento FormaPagamento[]
+  contasBancarias ContaBancariaErp[]
+  titulos         Titulo[]
+  notasFiscais    NotaFiscal[]
+  impostos        Imposto[]
+  syncRuns        SyncRun[]
+  erpRawRecords   ErpRawRecord[]
+  auditLogs       AuditLog[]
+
+  @@map("empresas")
+}
+
+// ---------------------------------------------------------------------------
+// Cadastros sincronizados do ERP (todos idempotentes por empresaId+erpId)
+// ---------------------------------------------------------------------------
+
+model Cliente {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  documento String?
+  email     String?
+  telefone  String?
+  ativo     Boolean  @default(true)
+  raw       Json
+  erpCriadoEm     DateTime?
+  erpModificadoEm DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos      Titulo[]
+  notasFiscais NotaFiscal[]
+
+  @@unique([empresaId, erpId])
+  @@map("clientes")
+}
+
+model Fornecedor {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  documento String?
+  email     String?
+  telefone  String?
+  ativo     Boolean  @default(true)
+  raw       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos      Titulo[]
+  notasFiscais NotaFiscal[]
+
+  @@unique([empresaId, erpId])
+  @@map("fornecedores")
+}
+
+model Transportadora {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  raw       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos Titulo[]
+
+  @@unique([empresaId, erpId])
+  @@map("transportadoras")
+}
+
+// "Plano de contas". tipo (RECEITA/DESPESA) começa com um valor padrão e
+// deve ser revisado manualmente até a regra real (Excel/ERP) ser confirmada
+// — ver premissa registrada no plano.
+model CategoriaFinanceira {
+  id        String        @id @default(cuid())
+  empresaId String
+  empresa   Empresa       @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  tipo      CategoriaTipo @default(DESPESA)
+  ativo     Boolean       @default(true)
+  raw       Json
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  titulos  Titulo[]
+  impostos Imposto[]
+
+  @@unique([empresaId, erpId])
+  @@map("categorias_financeiras")
+}
+
+model CentroCusto {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  ativo     Boolean  @default(true)
+  raw       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos  Titulo[]
+  impostos Imposto[]
+
+  @@unique([empresaId, erpId])
+  @@map("centros_custo")
+}
+
+model FormaPagamento {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  raw       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos Titulo[]
+
+  @@unique([empresaId, erpId])
+  @@map("formas_pagamento")
+}
+
+// Metadado da conta bancária vinda do ERP — NÃO é uma integração bancária
+// real (sem extrato/OFX nesta entrega, ver ExtratoBancarioLancamento).
+model ContaBancariaErp {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  erpId     String
+  nome      String
+  raw       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos            Titulo[]
+  extratoLancamentos ExtratoBancarioLancamento[]
+
+  @@unique([empresaId, erpId])
+  @@map("contas_bancarias_erp")
+}
+
+// ---------------------------------------------------------------------------
+// Título — contas a pagar e a receber unificadas (ver plano: mesmo formato,
+// mesmas regras, fluxo de caixa soma os dois).
+// ---------------------------------------------------------------------------
+
+model Titulo {
+  id        String     @id @default(cuid())
+  empresaId String
+  empresa   Empresa    @relation(fields: [empresaId], references: [id])
+  tipo      TituloTipo
+  erpId     String
+  codigo    String?
+
+  descricao     String
+  valorOriginal Decimal @db.Decimal(14, 2)
+  juros         Decimal @default(0) @db.Decimal(14, 2)
+  desconto      Decimal @default(0) @db.Decimal(14, 2)
+  taxaBanco     Decimal @default(0) @db.Decimal(14, 2)
+  taxaOperadora Decimal @default(0) @db.Decimal(14, 2)
+  valorTotal    Decimal @db.Decimal(14, 2)
+
+  categoriaId String?
+  categoria   CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+
+  centroCustoId String?
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id])
+
+  contaBancariaId String?
+  contaBancaria   ContaBancariaErp? @relation(fields: [contaBancariaId], references: [id])
+
+  formaPagamentoId String?
+  formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
+
+  entidadeTipo EntidadeTipo
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  transportadoraId String?
+  transportadora   Transportadora? @relation(fields: [transportadoraId], references: [id])
+
+  funcionarioErpId String?
+  nomeFuncionario  String?
+
+  lojaErpId String?
+  nomeLoja  String?
+
+  // Fatos de regime — nunca conflatar caixa (dataLiquidacao) com competência
+  // (dataCompetencia/dataVencimento). Status é sempre computado, não armazenado.
+  liquidado       Boolean
+  dataVencimento  DateTime
+  dataLiquidacao  DateTime?
+  dataCompetencia DateTime
+
+  canceladoEm DateTime?
+
+  // Stub de conciliação bancária — schema pronto, sem UI nesta entrega.
+  statusConciliacao      StatusConciliacao          @default(PENDENTE)
+  conciliadoLancamentoId String?
+  conciliadoLancamento   ExtratoBancarioLancamento? @relation(fields: [conciliadoLancamentoId], references: [id])
+  conciliadoEm           DateTime?
+
+  raw             Json
+  erpCriadoEm     DateTime?
+  erpModificadoEm DateTime?
+
+  lastSyncRunId String?
+  lastSyncRun   SyncRun? @relation(fields: [lastSyncRunId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, tipo, erpId])
+  @@index([empresaId, tipo, dataVencimento])
+  @@index([empresaId, tipo, liquidado])
+  @@index([empresaId, tipo, dataCompetencia])
+  @@map("titulos")
+}
+
+// Campos ainda não confirmados contra a API real — mantido mínimo, com
+// fallback em `raw` (ver ErpRawRecord também para o payload cru completo).
+model NotaFiscal {
+  id          String    @id @default(cuid())
+  empresaId   String
+  empresa     Empresa   @relation(fields: [empresaId], references: [id])
+  erpId       String
+  numero      String?
+  serie       String?
+  situacao    String?
+  valor       Decimal?  @db.Decimal(14, 2)
+  dataEmissao DateTime?
+
+  clienteId String?
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+
+  raw       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([empresaId, erpId])
+  @@map("notas_fiscais")
+}
+
+// ---------------------------------------------------------------------------
+// Imposto — módulo interno, NÃO sincronizado do ERP. situacao é armazenada
+// porque é uma transição manual (usuário autorizado confirma).
+// ---------------------------------------------------------------------------
+
+model Imposto {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  tipo            String
+  competencia     DateTime
+  vencimento      DateTime
+  valorEstimado   Decimal         @db.Decimal(14, 2)
+  valorConfirmado Decimal?        @db.Decimal(14, 2)
+  valorPago       Decimal?        @db.Decimal(14, 2)
+  dataPagamento   DateTime?
+  situacao        ImpostoSituacao @default(ESTIMADO)
+  codigoGuia      String?
+  comprovanteUrl  String?
+  observacoes     String?         @db.Text
+
+  categoriaId String?
+  categoria   CategoriaFinanceira? @relation(fields: [categoriaId], references: [id])
+
+  centroCustoId String?
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id])
+
+  createdByUserId String?
+  createdByUser   User?   @relation("ImpostoCriadoPor", fields: [createdByUserId], references: [id])
+
+  confirmedByUserId String?
+  confirmedByUser   User?     @relation("ImpostoConfirmadoPor", fields: [confirmedByUserId], references: [id])
+  confirmedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([empresaId, competencia])
+  @@map("impostos")
+}
+
+// ---------------------------------------------------------------------------
+// Conciliação bancária — stub de schema para a futura importação OFX/CSV.
+// Não implementado nesta entrega (sem UI, sem parser de arquivo).
+// ---------------------------------------------------------------------------
+
+model ExtratoBancarioLancamento {
+  id               String            @id @default(cuid())
+  empresaId        String
+  contaBancariaId  String?
+  contaBancaria    ContaBancariaErp? @relation(fields: [contaBancariaId], references: [id])
+  dataMovimento    DateTime
+  descricao        String
+  valor            Decimal           @db.Decimal(14, 2)
+  origemImportacao String
+  raw              Json?
+  status           StatusConciliacao @default(PENDENTE)
+  createdAt        DateTime          @default(now())
+
+  titulos Titulo[]
+
+  @@map("extrato_bancario_lancamentos")
+}
+
+// ---------------------------------------------------------------------------
+// Staging genérico para recursos do ERP sem mapeamento de campos confirmado
+// ainda (ver src/server/erp/mappings/registry.ts).
+// ---------------------------------------------------------------------------
+
+model ErpRawRecord {
+  id        String   @id @default(cuid())
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  resource  String
+  erpId     String
+  payload   Json
+  fetchedAt DateTime @default(now())
+
+  syncRunId String?
+  syncRun   SyncRun? @relation(fields: [syncRunId], references: [id])
+
+  @@unique([empresaId, resource, erpId])
+  @@map("erp_raw_records")
+}
+
+// ---------------------------------------------------------------------------
+// Histórico de sincronização
+// ---------------------------------------------------------------------------
+
+model SyncRun {
+  id                  String        @id @default(cuid())
+  empresaId           String
+  empresa             Empresa       @relation(fields: [empresaId], references: [id])
+  trigger             SyncTrigger
+  triggeredByUserId   String?
+  triggeredByUser     User?         @relation(fields: [triggeredByUserId], references: [id])
+  status              SyncRunStatus @default(PENDENTE)
+  resourcesRequested  String[]
+  erpAdapterName      String
+  isSimulated         Boolean       @default(true)
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  totalFetched        Int           @default(0)
+  totalCreated        Int           @default(0)
+  totalUpdated        Int           @default(0)
+  totalSkipped        Int           @default(0)
+  totalFailed         Int           @default(0)
+  errorSummary        String?
+  createdAt           DateTime      @default(now())
+
+  resourceRuns  SyncRunResource[]
+  logs          SyncLogEntry[]
+  titulos       Titulo[]
+  erpRawRecords ErpRawRecord[]
+
+  @@map("sync_runs")
+}
+
+model SyncRunResource {
+  id                     String        @id @default(cuid())
+  syncRunId              String
+  syncRun                SyncRun       @relation(fields: [syncRunId], references: [id])
+  resource                String
+  status                 SyncRunStatus @default(PENDENTE)
+  dataInicioFiltro       DateTime?
+  dataFimFiltro          DateTime?
+  paginasTotais          Int?
+  ultimaPaginaProcessada Int?
+  registrosTotal         Int?
+  criados                Int           @default(0)
+  atualizados            Int           @default(0)
+  ignorados              Int           @default(0)
+  falhas                 Int           @default(0)
+  startedAt              DateTime?
+  finishedAt             DateTime?
+
+  @@unique([syncRunId, resource])
+  @@map("sync_run_resources")
+}
+
+model SyncLogEntry {
+  id              String   @id @default(cuid())
+  syncRunId       String
+  syncRun         SyncRun  @relation(fields: [syncRunId], references: [id])
+  syncRunResource String?
+  level           LogLevel
+  message         String
+  context         Json?
+  createdAt       DateTime @default(now())
+
+  @@index([syncRunId, level])
+  @@map("sync_log_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Auditoria — mudanças de negócio (manuais ou notáveis via sync). Distinto do
+// histórico mecânico de sync acima (ver racional no plano).
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String         @id @default(cuid())
+  empresaId  String
+  empresa    Empresa        @relation(fields: [empresaId], references: [id])
+  actorType  AuditActorType
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String
+  beforeData Json?
+  afterData  Json?
+  createdAt  DateTime       @default(now())
+
+  @@index([empresaId, entityType, entityId])
+  @@map("audit_logs")
+}

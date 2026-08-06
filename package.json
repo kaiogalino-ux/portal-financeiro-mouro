@@ -1,0 +1,19 @@
+{
+  "name": "gestaoclick-integration",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Integração Node.js com a API do ERP Gestão Click (Betel Tecnologia)",
+  "scripts": {
+    "listar-clientes": "node examples/listar-clientes.js",
+    "criar-cliente": "node examples/criar-cliente.js",
+    "mcp": "node src/mcpServer.js",
+    "relatorio-contas-a-pagar": "node scripts/relatorio-contas-a-pagar.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "dotenv": "^16.4.5",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.1"
+  }
+}
