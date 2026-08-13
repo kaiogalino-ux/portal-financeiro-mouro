@@ -7,6 +7,16 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/** Falha de autenticação por chave de API (header ausente, chave inválida,
+ * revogada ou expirada) — mensagem própria porque "sessão expirada" não faz
+ * sentido para quem chama a API de fora. */
+export class ApiAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiAuthError';
+  }
+}
+
 export class ForbiddenError extends Error {
   constructor(resource: string, action: string) {
     super(`Sem permissão para ${action} em ${resource}.`);
@@ -15,7 +25,7 @@ export class ForbiddenError extends Error {
 }
 
 export function toHttpError(error: unknown): NextResponse {
-  if (error instanceof UnauthorizedError) {
+  if (error instanceof UnauthorizedError || error instanceof ApiAuthError) {
     return NextResponse.json({ erro: error.message }, { status: 401 });
   }
   if (error instanceof ForbiddenError) {

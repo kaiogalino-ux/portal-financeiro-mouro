@@ -4,7 +4,8 @@ import {
   getPrincipaisFornecedores, getResultadoPorCentroCusto,
 } from '@/server/dashboard/series';
 import { listCategoriasLookup, listCentrosCustoLookup, listEmpresasLookup } from '@/server/data-access/lookups.repo';
-import { dashboardFiltersSchema, kpiKeySchema } from '@/shared/schemas/dashboard.schema';
+import { dashboardFiltersSchema } from '@/shared/schemas/dashboard.schema';
+import type { KpiKey } from '@/shared/schemas/dashboard.schema';
 import { GlobalFilterBar } from '@/components/dashboard/GlobalFilterBar';
 import { KpiCard } from '@/components/dashboard/KpiCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -18,6 +19,11 @@ import { EmptyState } from '@/components/ui/States';
 interface DashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
+
+/** Resumo executivo mostra só estes 4 — os demais KPIs (títulos vencidos,
+ * faturamento do mês, realizado do período, saldo projetado) continuam
+ * calculáveis via getKpi, só não aparecem aqui. */
+const DASHBOARD_KPI_KEYS: KpiKey[] = ['recebidoAteHoje', 'gastoAteHoje', 'totalAReceber', 'totalAPagar'];
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const rawParams = await searchParams;
@@ -37,7 +43,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     listEmpresasLookup(),
     listCentrosCustoLookup(filters.empresaId),
     listCategoriasLookup(filters.empresaId),
-    Promise.all(kpiKeySchema.options.map((key) => getKpi(key, filters))),
+    Promise.all(DASHBOARD_KPI_KEYS.map((key) => getKpi(key, filters))),
     getFluxoCaixaProjetado(filters),
     getPrincipaisClientes(filters),
     getPrincipaisFornecedores(filters),
@@ -51,7 +57,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     <div>
       <GlobalFilterBar filters={filters} empresas={empresas} centrosCusto={centrosCusto} categorias={categorias} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {kpis.map((kpi) => (
           <KpiCard key={kpi.key} result={kpi} filters={filters} />
         ))}

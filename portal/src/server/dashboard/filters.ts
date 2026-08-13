@@ -2,6 +2,11 @@ import type { Prisma, TituloTipo } from '@/generated/prisma';
 import type { DashboardFilters } from '@/shared/schemas/dashboard.schema';
 import { parseCalendarDate } from '@/shared/format/date';
 
+/** Única conta bancária considerada em todo o portal — confirmado com o
+ * cliente que outras contas (ex.: contas pessoais/legado) nunca devem
+ * entrar em nenhum KPI, gráfico ou listagem. */
+const CONTA_BANCARIA_CONSIDERADA = 'Bradesco';
+
 export interface BuildWhereOptions {
   tipo?: TituloTipo;
   /** Se true, aplica periodoInicio/periodoFim; algumas leituras (ex.: total
@@ -20,7 +25,9 @@ export function buildTituloWhere(
   filters: DashboardFilters,
   options: BuildWhereOptions = {},
 ): Prisma.TituloWhereInput {
-  const where: Prisma.TituloWhereInput = {};
+  const where: Prisma.TituloWhereInput = {
+    contaBancaria: { nome: { equals: CONTA_BANCARIA_CONSIDERADA, mode: 'insensitive' } },
+  };
 
   if (options.tipo) where.tipo = options.tipo;
   if (filters.empresaId) where.empresaId = filters.empresaId;

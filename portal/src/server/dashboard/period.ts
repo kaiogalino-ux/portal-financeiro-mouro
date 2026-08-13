@@ -34,3 +34,10 @@ export function percentChange(atual: number, anterior: number): number | null {
   if (anterior === 0) return atual === 0 ? 0 : null;
   return (atual - anterior) / Math.abs(anterior);
 }
+
+/** O mês vigente nunca está "fechado" (ainda pode receber lançamentos/baixas
+ * o resto do mês) — usado por KPIs e gráficos de acumulado/realizado que só
+ * devem contar meses inteiramente encerrados. */
+export function fimDoUltimoMesFechado(hoje: Date): Date {
+  return endOfMonth(subMonths(hoje, 1));
+}

@@ -11,6 +11,29 @@ export const ROLE_LABELS: Record<RoleName, string> = {
 const ALL_ACTIONS: Action[] = ['read', 'create', 'update', 'delete'];
 
 /**
+ * Lista exaustiva de recursos. O `satisfies Record<Resource, true>` faz o
+ * TypeScript falhar se um recurso novo for adicionado ao union `Resource` e
+ * esquecido aqui — antes esta lista era literal e um esquecimento passava
+ * silenciosamente, sumindo o item do menu do Administrador.
+ */
+const ALL_RESOURCES = Object.keys({
+  dashboard: true,
+  contasAPagar: true,
+  contasAReceber: true,
+  fluxoDeCaixa: true,
+  notasFiscais: true,
+  impostos: true,
+  centrosDeCusto: true,
+  clientes: true,
+  fornecedores: true,
+  relatorios: true,
+  sincronizacoes: true,
+  integracoes: true,
+  usuarios: true,
+  auditoria: true,
+} satisfies Record<Resource, true>) as Resource[];
+
+/**
  * Matriz de permissões fixa (perfis não são dinâmicos nesta entrega).
  * '*' cobre todos os recursos. Ausência de uma entrada = sem acesso.
  */
@@ -57,23 +80,7 @@ export function can(role: RoleName, action: Action, resource: Resource): boolean
 /** Recursos que o perfil pode pelo menos ler — usado para montar a navegação. */
 export function readableResources(role: RoleName): Set<Resource> {
   const perms = ROLE_PERMISSIONS[role];
-  if (perms['*']) {
-    return new Set([
-      'dashboard',
-      'contasAPagar',
-      'contasAReceber',
-      'fluxoDeCaixa',
-      'notasFiscais',
-      'impostos',
-      'centrosDeCusto',
-      'clientes',
-      'fornecedores',
-      'relatorios',
-      'sincronizacoes',
-      'usuarios',
-      'auditoria',
-    ]);
-  }
+  if (perms['*']) return new Set(ALL_RESOURCES);
   return new Set(
     (Object.keys(perms) as Resource[]).filter((resource) => perms[resource]?.includes('read')),
   );

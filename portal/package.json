@@ -15,13 +15,16 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:bootstrap-real": "tsx scripts/bootstrap-real.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "sync:diario": "tsx scripts/sync-diario.ts",
+    "mcp": "node mcp/portalFinanceiroMcp.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-tooltip": "^1.2.16",

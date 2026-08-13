@@ -59,13 +59,15 @@ export const KPI_LABELS: Record<KpiKey, string> = {
   despesasRealizadas: 'Despesas realizadas',
   resultadoDoPeriodo: 'Resultado do período',
   saldoProjetado: 'Saldo projetado',
+  recebidoAteHoje: 'Recebido até hoje',
+  gastoAteHoje: 'Gasto até hoje',
 };
 
 export const KPI_HELP: Record<KpiKey, string> = {
   totalAPagar:
-    'Soma dos títulos a pagar ainda não liquidados com vencimento até hoje (atrasados + os que vencem hoje). Não inclui parcelas/vencimentos futuros que ainda não chegaram na data.',
+    'Soma dos títulos a pagar ainda não liquidados com vencimento entre 01/12/2025 e o fim do mês atual. Não inclui vencimentos anteriores a dez/2025 nem posteriores ao mês vigente.',
   totalAReceber:
-    'Soma dos títulos a receber ainda não liquidados com vencimento até 1 ano a partir de hoje (atrasados + a vencer nos próximos 12 meses). Não inclui vencimentos além desse horizonte.',
+    'Soma dos títulos a receber ainda não liquidados com vencimento a partir de 01/01/2026 (atrasados + a vencer, sem limite de fim). Não inclui vencimentos anteriores a 2026.',
   titulosVencidos: 'Títulos (a pagar e a receber) com vencimento anterior a hoje e ainda não liquidados.',
   faturamentoDoMes: 'Soma do valor das notas fiscais emitidas com data de emissão no mês atual.',
   receitasRealizadas: 'Títulos a receber já liquidados dentro do período e regime selecionados.',
@@ -73,4 +75,8 @@ export const KPI_HELP: Record<KpiKey, string> = {
   resultadoDoPeriodo: 'Receitas realizadas menos despesas realizadas no período selecionado.',
   saldoProjetado:
     'Previsto a receber menos previsto a pagar (títulos em aberto) dentro do período selecionado. Não inclui saldo bancário real — sem integração de extrato nesta entrega.',
+  recebidoAteHoje:
+    'Soma dos títulos a receber já liquidados dentro do ano vigente, do dia 01/01 até o fim do último mês fechado. O mês vigente nunca entra, porque ainda pode receber baixas até terminar.',
+  gastoAteHoje:
+    'Soma dos títulos a pagar já liquidados dentro do ano vigente, do dia 01/01 até o fim do último mês fechado. O mês vigente nunca entra, porque ainda pode receber baixas até terminar.',
 };

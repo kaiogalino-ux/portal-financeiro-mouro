@@ -4,7 +4,48 @@ import { GestaoClickAdapter } from '@/server/erp/gestaoClickAdapter';
 import type { ErpAdapter, ErpResourceName } from '@/server/erp/types';
 import { mapAndUpsert, MAPPED_RESOURCES } from '@/server/erp/mappings/registry';
 import { unwrapErpRecord } from '@/server/erp/unwrapErpRecord';
-import type { SyncRunStatus, SyncTrigger } from '@/generated/prisma';
+import type { SyncRunStatus, SyncTrigger, TituloTipo } from '@/generated/prisma';
+
+/** Únicos recursos que alimentam a tabela Titulo com uma janela de datas —
+ * usados para reconciliar exclusões (ver reconciliarTitulosRemovidos). */
+const TITULO_TIPO_POR_RECURSO: Partial<Record<ErpResourceName, TituloTipo>> = {
+  pagamentos: 'PAGAR',
+  recebimentos: 'RECEBER',
+};
+
+/**
+ * A sincronização só faz upsert — nunca soube apagar localmente um título
+ * que foi excluído na origem (não confundir com "liquidado", que é uma
+ * mudança de campo, não some da API). Um título excluído no ERP some da
+ * resposta da API pra sempre, mas continuava "em aberto" no banco local
+ * pra sempre também, inflando os KPIs de total em aberto silenciosamente.
+ * Aqui, ao final de sincronizar `pagamentos`/`recebimentos`, qualquer
+ * título local ainda em aberto dentro da janela pesquisada cujo erpId não
+ * veio na resposta é marcado como CANCELADO (nunca apagado — mantém o
+ * histórico/auditoria).
+ */
+async function reconciliarTitulosRemovidos(
+  empresaId: string,
+  tipo: TituloTipo,
+  janela: { dateFrom?: string; dateTo?: string },
+  erpIdsVistos: Set<string>,
+): Promise<number> {
+  if (!janela.dateFrom || !janela.dateTo) return 0;
+
+  const resultado = await prisma.titulo.updateMany({
+    where: {
+      empresaId,
+      tipo,
+      liquidado: false,
+      canceladoEm: null,
+      dataVencimento: { gte: new Date(`${janela.dateFrom}T00:00:00`), lte: new Date(`${janela.dateTo}T23:59:59`) },
+      erpId: { notIn: [...erpIdsVistos] },
+    },
+    data: { canceladoEm: new Date() },
+  });
+
+  return resultado.count;
+}
 
 /** Ordem importa: dados-mestre antes de títulos (que referenciam suas FKs
  * locais), notas depois, recursos sem mapeamento por último. */
@@ -132,6 +173,8 @@ export async function runSync(empresaId: string, options: RunSyncOptions): Promi
     let falhas = 0;
     let page = 1;
     let totalPaginas = 1;
+    const tipoTitulo = TITULO_TIPO_POR_RECURSO[resource];
+    const erpIdsVistos = tipoTitulo ? new Set<string>() : null;
 
     try {
       do {
@@ -147,6 +190,7 @@ export async function runSync(empresaId: string, options: RunSyncOptions): Promi
 
         for (const rawOriginal of resultado.data) {
           const raw = unwrapErpRecord(rawOriginal);
+          erpIdsVistos?.add(String((raw as Record<string, unknown>).id ?? ''));
           try {
             if (MAPPED_RESOURCES.includes(resource)) {
               const outcome = await mapAndUpsert(resource, raw, { empresaId, syncRunId: syncRun.id });
@@ -183,6 +227,20 @@ export async function runSync(empresaId: string, options: RunSyncOptions): Promi
 
         page++;
       } while (page <= totalPaginas);
+
+      if (tipoTitulo && erpIdsVistos) {
+        const removidos = await reconciliarTitulosRemovidos(empresaId, tipoTitulo, janela, erpIdsVistos);
+        if (removidos > 0) {
+          await prisma.syncLogEntry.create({
+            data: {
+              syncRunId: syncRun.id,
+              syncRunResource: resource,
+              level: 'INFO',
+              message: `${removidos} título(s) em aberto não retornaram mais da API dentro da janela pesquisada — marcados como CANCELADO (removidos na origem).`,
+            },
+          });
+        }
+      }
 
       await prisma.syncRunResource.update({
         where: { id: resourceRun.id },

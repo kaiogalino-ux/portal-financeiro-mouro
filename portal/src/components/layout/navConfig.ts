@@ -1,6 +1,6 @@
 import {
   BarChart3, Building2, FileStack, Landmark, LayoutDashboard, ListChecks,
-  Receipt, RefreshCw, ScrollText, ShieldCheck, Users, Wallet, Percent,
+  Receipt, RefreshCw, ScrollText, ShieldCheck, Users, Wallet, Percent, PlugZap,
 } from 'lucide-react';
 import type { Resource } from '@/shared/types/rbac.types';
 
@@ -25,6 +25,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/fornecedores', label: 'Fornecedores', resource: 'fornecedores', icon: Building2 },
   { href: '/relatorios', label: 'Relatórios', resource: 'relatorios', icon: ScrollText, emConstrucao: true },
   { href: '/sincronizacoes', label: 'Sincronizações', resource: 'sincronizacoes', icon: RefreshCw },
+  { href: '/integracoes', label: 'Integrações', resource: 'integracoes', icon: PlugZap },
   { href: '/usuarios', label: 'Usuários e Permissões', resource: 'usuarios', icon: ListChecks },
   { href: '/auditoria', label: 'Auditoria', resource: 'auditoria', icon: ShieldCheck },
 ];

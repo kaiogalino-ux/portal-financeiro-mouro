@@ -19,5 +19,6 @@ export type Resource =
   | 'fornecedores'
   | 'relatorios'
   | 'sincronizacoes'
+  | 'integracoes'
   | 'usuarios'
   | 'auditoria';

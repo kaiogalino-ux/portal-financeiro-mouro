@@ -7,6 +7,7 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 coverage/
+*.log
 
 # Prisma Client é gerado por `npm run db:generate` — inclui binário do
 # query engine (dezenas de MB, específico por plataforma), nunca versionar.

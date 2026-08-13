@@ -3,6 +3,7 @@ import { prisma } from '@/server/db/prisma';
 import { withAuthz } from '@/server/data-access/withAuthz';
 import { formatMonthLabel, todayInSaoPaulo } from '@/shared/format/date';
 import { formatBRL } from '@/shared/format/currency';
+import { fimDoUltimoMesFechado } from './period';
 
 function formatDecimalPtBr(value: number, digits: number): string {
   return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(
@@ -27,6 +28,9 @@ interface BucketAccum {
  * meses futuros usam o previsto (títulos em aberto) — ambos pela data de
  * vencimento, que é a data relevante para "quando o dinheiro deve
  * entrar/saír" tanto para o que já aconteceu quanto para o que ainda vai.
+ * O pivô do gráfico é o último mês FECHADO, não o mês vigente — o mês
+ * vigente ainda pode receber baixas até terminar, então ele entra como o
+ * primeiro mês "projetado", nunca como o último mês "realizado".
  */
 export const getFluxoCaixaProjetado = withAuthz(
   'dashboard',
@@ -39,8 +43,9 @@ export const getFluxoCaixaProjetado = withAuthz(
     const mesesAntes = opts.mesesAntes ?? 3;
     const mesesDepois = opts.mesesDepois ?? 6;
     const hoje = todayInSaoPaulo();
-    const inicio = startOfMonth(subMonths(hoje, mesesAntes));
-    const fim = endOfMonth(addMonths(hoje, mesesDepois));
+    const pivo = startOfMonth(fimDoUltimoMesFechado(hoje));
+    const inicio = startOfMonth(subMonths(pivo, mesesAntes));
+    const fim = endOfMonth(addMonths(pivo, mesesDepois));
 
     const titulos = await prisma.titulo.findMany({
       where: {
@@ -52,7 +57,7 @@ export const getFluxoCaixaProjetado = withAuthz(
 
     const buckets = new Map<string, BucketAccum>();
     for (let i = -mesesAntes; i <= mesesDepois; i++) {
-      buckets.set(monthKey(addMonths(hoje, i)), { entradas: 0, saidas: 0 });
+      buckets.set(monthKey(addMonths(pivo, i)), { entradas: 0, saidas: 0 });
     }
 
     for (const titulo of titulos) {
@@ -77,27 +82,28 @@ export const getFluxoCaixaProjetado = withAuthz(
   },
 );
 
-/** Evolução mensal — só realizado, últimos N meses (para o gráfico histórico). */
+/** Evolução mensal — só realizado, últimos N meses inteiramente fechados
+ * (o mês vigente nunca entra — ver fimDoUltimoMesFechado). */
 export const getEvolucaoMensalRealizada = withAuthz(
   'dashboard',
   'read',
   async (_session, filters: DashboardFilters, meses: number = 6): Promise<SeriesPoint[]> => {
-    const hoje = todayInSaoPaulo();
-    const inicio = startOfMonth(subMonths(hoje, meses - 1));
+    const fimJanela = fimDoUltimoMesFechado(todayInSaoPaulo());
+    const inicio = startOfMonth(subMonths(fimJanela, meses - 1));
 
     const campoData = filters.regime === 'caixa' ? 'dataLiquidacao' : 'dataCompetencia';
     const titulos = await prisma.titulo.findMany({
       where: {
         ...buildTituloWhere(filters),
         liquidado: true,
-        [campoData]: { gte: inicio, lte: hoje },
+        [campoData]: { gte: inicio, lte: fimJanela },
       },
       select: { tipo: true, valorTotal: true, dataLiquidacao: true, dataCompetencia: true },
     });
 
     const buckets = new Map<string, BucketAccum>();
     for (let i = meses - 1; i >= 0; i--) {
-      buckets.set(monthKey(subMonths(hoje, i)), { entradas: 0, saidas: 0 });
+      buckets.set(monthKey(subMonths(fimJanela, i)), { entradas: 0, saidas: 0 });
     }
 
     for (const titulo of titulos) {

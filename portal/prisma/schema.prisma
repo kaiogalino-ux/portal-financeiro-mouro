@@ -45,10 +45,41 @@ model User {
   sessions        Session[]
   syncRuns        SyncRun[]
   auditLogs       AuditLog[]
+  apiKeysCriadas  ApiKey[]  @relation("ApiKeyCriadaPor")
   impostosCriados     Imposto[] @relation("ImpostoCriadoPor")
   impostosConfirmados Imposto[] @relation("ImpostoConfirmadoPor")
 
   @@map("usuarios")
+}
+
+/**
+ * Chave de API para integrações externas (MCP, ChatGPT, Telegram, WhatsApp).
+ * O token em si NUNCA é armazenado — só o SHA-256 dele. `prefixo` guarda os
+ * primeiros caracteres em claro apenas para o usuário reconhecer qual chave
+ * é qual na tela, sem permitir reconstruir o token.
+ *
+ * A chave carrega um `role` e passa exatamente pela mesma matriz RBAC dos
+ * usuários (ver shared/constants/roles.ts) — uma chave FINANCEIRO enxerga o
+ * mesmo que um usuário FINANCEIRO, nada além.
+ */
+model ApiKey {
+  id          String    @id @default(cuid())
+  nome        String
+  prefixo     String    @unique
+  tokenHash   String    @unique
+  role        Role      @default(VISUALIZADOR)
+  ativo       Boolean   @default(true)
+  expiraEm    DateTime?
+  ultimoUsoEm DateTime?
+  revogadoEm  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  criadoPorId String?
+  criadoPor   User?   @relation("ApiKeyCriadaPor", fields: [criadoPorId], references: [id])
+
+  @@index([ativo])
+  @@map("api_keys")
 }
 
 model Account {
@@ -133,6 +164,7 @@ enum ImpostoSituacao {
 enum SyncTrigger {
   MANUAL
   AGENDADO
+  API
 }
 
 enum SyncRunStatus {
@@ -153,6 +185,7 @@ enum LogLevel {
 enum AuditActorType {
   USUARIO
   SINCRONIZACAO
+  API
 }
 
 enum StatusConciliacao {

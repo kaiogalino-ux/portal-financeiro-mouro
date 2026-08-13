@@ -1,4 +1,4 @@
-import { addYears } from 'date-fns';
+import { endOfMonth, startOfYear } from 'date-fns';
 import { prisma } from '@/server/db/prisma';
 import { withAuthz } from '@/server/data-access/withAuthz';
 import { todayInSaoPaulo } from '@/shared/format/date';
@@ -8,7 +8,7 @@ import type { DrilldownResult, KpiResult } from '@/shared/types/dashboard.types'
 import { getIsDataSimulated } from './dataProvenance';
 import { buildTituloWhere } from './filters';
 import { mapTituloToDrilldownRow, TITULO_DRILLDOWN_INCLUDE } from './mapDrilldown';
-import { percentChange, shiftPeriod, withDefaultPeriod } from './period';
+import { fimDoUltimoMesFechado, percentChange, shiftPeriod, withDefaultPeriod } from './period';
 
 function toNumber(value: { toString(): string } | null | undefined): number {
   return value ? Number(value.toString()) : 0;
@@ -26,16 +26,22 @@ interface KpiDefinition {
   comparavel: boolean;
 }
 
-// Contas a pagar: em aberto, do passado até hoje (não conta parcelas futuras
-// que ainda não venceram). Contas a receber: em aberto, até 1 ano para
-// frente (regra diferente das duas, confirmada com o cliente).
+// Contas a pagar: em aberto, com vencimento a partir de dez/2025 até o fim
+// do mês vigente (regra confirmada com o cliente). Contas a receber: em
+// aberto, com vencimento a partir de 01/01/2026, sem limite de fim — corta
+// legado anterior a 2026, mas conta tudo dali pra frente (regra confirmada
+// com o cliente).
+const TOTAL_A_PAGAR_INICIO = new Date('2025-12-01T00:00:00');
+const TOTAL_A_RECEBER_INICIO = new Date('2026-01-01T00:00:00');
+
 const totalAPagarDef: KpiDefinition = {
   comparavel: false,
   valor: (filters) =>
     sumValorTotal({
       ...buildTituloWhere(filters, { tipo: 'PAGAR' }),
       liquidado: false,
-      dataVencimento: { lte: todayInSaoPaulo() },
+      canceladoEm: null,
+      dataVencimento: { gte: TOTAL_A_PAGAR_INICIO, lte: endOfMonth(todayInSaoPaulo()) },
     }),
 };
 
@@ -45,7 +51,8 @@ const totalAReceberDef: KpiDefinition = {
     sumValorTotal({
       ...buildTituloWhere(filters, { tipo: 'RECEBER' }),
       liquidado: false,
-      dataVencimento: { lte: addYears(todayInSaoPaulo(), 1) },
+      canceladoEm: null,
+      dataVencimento: { gte: TOTAL_A_RECEBER_INICIO },
     }),
 };
 
@@ -55,6 +62,7 @@ const titulosVencidosDef: KpiDefinition = {
     sumValorTotal({
       ...buildTituloWhere(filters),
       liquidado: false,
+      canceladoEm: null,
       dataVencimento: { lt: todayInSaoPaulo() },
     }),
 };
@@ -105,6 +113,29 @@ const resultadoDoPeriodoDef: KpiDefinition = {
   },
 };
 
+/** Acumulado do ano vigente, só meses inteiramente fechados — de 01/01 do
+ * ano corrente até o fim do último mês encerrado (o mês vigente nunca
+ * conta, porque ainda pode receber baixas até o fim dele). Diferente de
+ * receitasRealizadas/despesasRealizadas, que olham o período selecionado
+ * nos filtros, não o ano vigente. */
+function ateHojeDef(tipo: 'PAGAR' | 'RECEBER'): KpiDefinition {
+  return {
+    comparavel: false,
+    valor: (filters) => {
+      const hoje = todayInSaoPaulo();
+      return sumValorTotal({
+        ...buildTituloWhere(filters, { tipo }),
+        liquidado: true,
+        canceladoEm: null,
+        dataLiquidacao: { gte: startOfYear(hoje), lte: fimDoUltimoMesFechado(hoje) },
+      });
+    },
+  };
+}
+
+const recebidoAteHojeDef = ateHojeDef('RECEBER');
+const gastoAteHojeDef = ateHojeDef('PAGAR');
+
 const saldoProjetadoDef: KpiDefinition = {
   comparavel: false,
   valor: async (filters) => {
@@ -112,10 +143,12 @@ const saldoProjetadoDef: KpiDefinition = {
       sumValorTotal({
         ...buildTituloWhere(filters, { tipo: 'RECEBER', aplicarPeriodo: true }),
         liquidado: false,
+        canceladoEm: null,
       }),
       sumValorTotal({
         ...buildTituloWhere(filters, { tipo: 'PAGAR', aplicarPeriodo: true }),
         liquidado: false,
+        canceladoEm: null,
       }),
     ]);
     return aReceber - aPagar;
@@ -131,6 +164,8 @@ const KPI_DEFINITIONS: Record<KpiKey, KpiDefinition> = {
   despesasRealizadas: despesasRealizadasDef,
   resultadoDoPeriodo: resultadoDoPeriodoDef,
   saldoProjetado: saldoProjetadoDef,
+  recebidoAteHoje: recebidoAteHojeDef,
+  gastoAteHoje: gastoAteHojeDef,
 };
 
 export const getKpi = withAuthz(
@@ -161,15 +196,26 @@ function detailWhereFor(key: KpiKey, filters: DashboardFilters) {
   const hoje = todayInSaoPaulo();
   switch (key) {
     case 'totalAPagar':
-      return { ...buildTituloWhere(filters, { tipo: 'PAGAR' }), liquidado: false, dataVencimento: { lte: hoje } };
+      return {
+        ...buildTituloWhere(filters, { tipo: 'PAGAR' }),
+        liquidado: false,
+        canceladoEm: null,
+        dataVencimento: { gte: TOTAL_A_PAGAR_INICIO, lte: endOfMonth(hoje) },
+      };
     case 'totalAReceber':
       return {
         ...buildTituloWhere(filters, { tipo: 'RECEBER' }),
         liquidado: false,
-        dataVencimento: { lte: addYears(hoje, 1) },
+        canceladoEm: null,
+        dataVencimento: { gte: TOTAL_A_RECEBER_INICIO },
       };
     case 'titulosVencidos':
-      return { ...buildTituloWhere(filters), liquidado: false, dataVencimento: { lt: hoje } };
+      return {
+        ...buildTituloWhere(filters),
+        liquidado: false,
+        canceladoEm: null,
+        dataVencimento: { lt: hoje },
+      };
     case 'receitasRealizadas':
       return {
         ...buildTituloWhere(filters, {
@@ -197,6 +243,21 @@ function detailWhereFor(key: KpiKey, filters: DashboardFilters) {
       return {
         ...buildTituloWhere(filters, { aplicarPeriodo: true }),
         liquidado: false,
+        canceladoEm: null,
+      };
+    case 'recebidoAteHoje':
+      return {
+        ...buildTituloWhere(filters, { tipo: 'RECEBER' }),
+        liquidado: true,
+        canceladoEm: null,
+        dataLiquidacao: { gte: startOfYear(hoje), lte: fimDoUltimoMesFechado(hoje) },
+      };
+    case 'gastoAteHoje':
+      return {
+        ...buildTituloWhere(filters, { tipo: 'PAGAR' }),
+        liquidado: true,
+        canceladoEm: null,
+        dataLiquidacao: { gte: startOfYear(hoje), lte: fimDoUltimoMesFechado(hoje) },
       };
     case 'faturamentoDoMes':
       return null; // usa notaFiscal, não titulo — ver getKpiDetalhe abaixo.

@@ -40,4 +40,12 @@ describe('readableResources', () => {
     const resources = readableResources('VISUALIZADOR');
     expect(Array.from(resources)).toEqual(['dashboard']);
   });
+
+  it('ADMINISTRADOR vê integrações — só ele gerencia chaves de API', () => {
+    expect(readableResources('ADMINISTRADOR').has('integracoes')).toBe(true);
+    for (const role of ['FINANCEIRO', 'CONTABILIDADE', 'DIRETORIA', 'VISUALIZADOR'] as const) {
+      expect(readableResources(role).has('integracoes')).toBe(false);
+      expect(can(role, 'create', 'integracoes')).toBe(false);
+    }
+  });
 });

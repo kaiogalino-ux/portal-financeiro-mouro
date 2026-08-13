@@ -77,6 +77,19 @@ Todos com a senha `Mouro@2026` (definida em `prisma/seed.ts`):
 | `npm run db:migrate` | aplica migrations do Prisma |
 | `npm run db:seed` | popula empresas/usuários e roda a sincronização simulada |
 | `npm run db:studio` | Prisma Studio (inspecionar o banco) |
+| `npm run sync:diario` | dispara a sincronização (trigger `AGENDADO`) — pensado pra rodar via agendador do SO, não manualmente |
+| `npm run mcp` | servidor MCP do portal (stdio) — consome a própria API v1; ver "Integrações" |
+
+### Sincronização diária automática
+
+A sincronização com o Gestão Click não roda por conta própria — precisa de
+um agendador do sistema operacional chamando `npm run sync:diario`
+periodicamente. Nesta máquina (Windows), isso está configurado como uma
+tarefa agendada (`schtasks`) chamando `sync-diario.cmd` todos os dias às
+07:00, com log em `sync-diario.log` (ambos na raiz de `portal/`, fora do
+controle de versão). Para inspecionar/alterar o horário:
+`schtasks /Query /TN "PortalFinanceiro_SyncDiaria" /V /FO LIST` ou o painel
+"Agendador de Tarefas" do Windows.
 
 ## O que está de fato pronto nesta entrega
 
@@ -155,6 +168,101 @@ Emitidas, Impostos, Centros de Custo (cadastro direto) e Relatórios
 - **Todo valor monetário é `Decimal` no Postgres** (`@db.Decimal(14,2)`),
   nunca `Float` — evita erro de arredondamento em valores financeiros reais.
 
+## Integrações (API pública + MCP)
+
+A página **Integrações** (só Administrador) gera chaves de API que permitem
+conectar o portal a outros aplicativos.
+
+**Modelo de acesso.** Cada chave carrega um perfil (`Role`) e passa pela
+**mesma matriz RBAC dos usuários** — uma chave `FINANCEIRO` enxerga
+exatamente o que um usuário `FINANCEIRO` enxergaria. Isso é conseguido sem
+duplicar nenhuma query: as rotas `/api/v1` rodam o handler dentro de
+`runAsApiActor` (`server/integracoes/apiActorContext.ts`, AsyncLocalStorage),
+e `withAuthz` — a única linha que de fato autoriza no servidor — reconhece
+esse ator e aplica `can()` normalmente. Todos os repositórios existentes
+funcionam pela API sem alteração.
+
+**Armazenamento do token.** Só o SHA-256 fica no banco (`ApiKey.tokenHash`);
+o token em claro existe uma única vez, no retorno da criação. `prefixo`
+guarda um trecho curto só para o usuário reconhecer a chave na tela. Como o
+token é aleatório de 256 bits, SHA-256 basta — bcrypt só penalizaria cada
+requisição sem ganho real. Revogar é irreversível de propósito.
+
+**Escopo.** Leitura de tudo que o perfil alcança, mais um único comando de
+escrita: `POST /api/v1/sincronizacoes`, que não altera nada no ERP — apenas
+atualiza a cópia local. Sincronização disparada assim é registrada com
+trigger `API` e auditada com `actorType: API`, para a trilha não confundir
+uma ação de robô com uma ação humana.
+
+### Endpoints
+
+Todos exigem `Authorization: Bearer <chave>`, exceto `openapi.json`.
+
+| Endpoint | O que faz |
+| --- | --- |
+| `GET /api/v1/me` | valida a chave e lista os recursos que ela alcança (use ao diagnosticar) |
+| `GET /api/v1/kpis` | todos os indicadores, cada um com `label` e a regra de cálculo |
+| `GET /api/v1/kpis/{indicador}` | um indicador; com `?detalhe=true`, os títulos que o compõem |
+| `GET /api/v1/contas-a-pagar` · `/contas-a-receber` | títulos, com os mesmos filtros do dashboard |
+| `GET /api/v1/clientes` · `/fornecedores` | cadastros, com `?busca=` |
+| `GET /api/v1/sincronizacoes` | histórico (mostra o quão atuais são os dados) |
+| `POST /api/v1/sincronizacoes` | dispara a sincronização (~1 min; exige Administrador ou Financeiro) |
+| `GET /api/v1/openapi.json` | especificação OpenAPI 3.1 — sem autenticação, é só a descrição da interface |
+
+As respostas de indicador incluem `descricao` (a regra de data exata do
+cálculo) porque o consumidor costuma ser um LLM: o número sem a regra que o
+define é convite a interpretação errada.
+
+### Conectando cada canal
+
+- **Claude (Desktop/Code)** — funciona já, local, sem publicar nada.
+  `npm run mcp` roda `mcp/portalFinanceiroMcp.mjs` via stdio, e ele consome
+  a própria API v1 (nunca o banco direto, para não criar um caminho de
+  acesso paralelo às regras da API). Configure com `PORTAL_API_URL` e
+  `PORTAL_API_TOKEN`; a página Integrações mostra o JSON pronto.
+- **ChatGPT (GPT Actions)** — importe `/api/v1/openapi.json` e escolha
+  autenticação Bearer.
+- **Telegram/WhatsApp** — não consomem API direto: precisam de um bot
+  intermediário (BotFather / API oficial da Meta ou Twilio) que chame a
+  API v1.
+
+**Os três últimos exigem o portal publicado com HTTPS** — chamam de fora e
+não alcançam `localhost`. Defina `PORTAL_PUBLIC_URL` quando publicar.
+
+## Como definir/ajustar um total (KPI) financeiro em aberto
+
+Todo KPI de "em aberto" (`totalAPagar`, `totalAReceber`, `titulosVencidos`,
+`saldoProjetado` — qualquer soma sobre `Titulo` com `liquidado: false`)
+segue sempre este processo, não só na entrega inicial:
+
+1. **A regra de data é sempre específica do KPI, nunca genérica** — cada
+   card pode ter seu próprio recorte (ex.: `totalAPagar` só conta
+   01/12/2025 → fim do mês vigente; `totalAReceber` só conta a partir de
+   01/01/2026, sem teto de fim). A regra vem do cliente, não de uma
+   convenção técnica — perguntar antes de assumir, e assumir explicitamente
+   se o corte tem início fixo, fim fixo, os dois, ou nenhum.
+2. **Sempre filtrar `canceladoEm: null`** junto com `liquidado: false` — um
+   título excluído na origem (ver `reconciliarTitulosRemovidos` em
+   `orchestrator.ts`) fica marcado `CANCELADO` localmente e nunca deve
+   entrar em nenhuma soma de "em aberto".
+3. **A mesma condição `where` alimenta a soma do card (`kpis.ts`
+   `KPI_DEFINITIONS`) e o drill-down (`detailWhereFor`)** — nunca duas
+   implementações da mesma regra; o total do card tem que ser sempre
+   exatamente a soma da lista que abre ao clicar nele.
+4. **Documentar a regra em texto simples em dois lugares**: o tooltip do
+   card (`KPI_HELP` em `dashboard.types.ts`) e este README (seção acima,
+   "Descobertas...") — quem for comparar com o relatório nativo da Gestão
+   Click precisa conseguir ler a regra exata sem abrir código.
+5. **Validar rodando uma sincronização e comparando com o relatório nativo
+   da Gestão Click** (mesmo filtro de data e situação "Em Aberto") — nunca
+   assumir que bate só porque o código parece certo. Se não bater
+   exatamente, investigar até achar a causa raiz específica (não parar em
+   "deve ser só sincronização desatualizada") — casos reais encontrados
+   nesta entrega: título excluído na origem que a sincronização nunca
+   limpava localmente (corrigido com a reconciliação), e um título
+   liquidado na Gestão Click nos minutos entre uma sincronização e a
+   comparação (não é bug — é só rodar a sincronização de novo).
+
 ## Descobertas ao ligar a API real do Gestão Click (não estavam em nenhuma doc)
 
 - **A janela de sincronização (`SYNC_LOOKBACK_DAYS`/`SYNC_LOOKAHEAD_DAYS`)
@@ -166,15 +274,14 @@ Emitidas, Impostos, Centros de Custo (cadastro direto) e Relatórios
   batia R$ 2.335.056,72 — o valor real, verificado somando manualmente os
   411 títulos em aberto trazidos pela API). Os padrões agora são 20 anos
   atrás / 10 anos à frente, para garantir cobertura total.
-- **"Total a pagar" e "Total a receber" usam regras de data diferentes uma
-  da outra, de propósito, confirmado com o cliente**: Total a pagar soma
-  títulos em aberto com vencimento **do passado até hoje** (atrasados + o
-  que vence hoje — nunca conta parcela futura que ainda não venceu). Total
-  a receber soma títulos em aberto com vencimento **até 1 ano a partir de
-  hoje** (atrasados + a vencer nos próximos 12 meses). Por isso os dois
-  também não batem com o relatório nativo "Contas a Pagar/Receber" do
-  Gestão Click, que por padrão mostra só um período selecionado na tela —
-  o tooltip de cada card explica a regra exata para quem for comparar.
+- **"Total a pagar" e "Total a receber" usam regras diferentes uma da
+  outra, de propósito, confirmado com o cliente**: Total a pagar soma
+  títulos em aberto com vencimento **entre 01/12/2025 e o fim do mês
+  vigente** (não conta vencimento anterior a dez/2025 nem posterior ao mês
+  atual). Total a receber soma títulos em aberto com vencimento **a partir
+  de 01/01/2026, sem limite de fim** (corta legado anterior a 2026, mas
+  conta tudo em aberto dali pra frente, mesmo muito no futuro). O tooltip
+  de cada card explica a regra exata para quem for comparar.
 - **Alguns recursos embrulham cada registro num objeto com o nome do model**
   (ex.: `compras` vem como `{ "Compra": {...} }`, `formas_pagamentos` como
   `{ "FormasPagamento": {...} }`), enquanto outros (`pagamentos`, `clientes`)
@@ -186,6 +293,18 @@ Emitidas, Impostos, Centros de Custo (cadastro direto) e Relatórios
   mensagem clara para esse recurso específico, em vez de tentar a cada
   sincronização; o indicador "Faturamento do mês" fica sem dados reais até
   a Gestão Click confirmar outro caminho (ex.: nota por nota) para isso.
+- **A sincronização só fazia upsert — nunca soube remover localmente um
+  título excluído na origem** (achado ao investigar por que "Total a pagar"
+  não batia com o relatório nativo do Gestão Click mesmo logo depois de
+  sincronizar: 4 títulos "fantasma", excluídos no ERP, continuavam contando
+  como em aberto no banco local pra sempre, porque o upsert só atualiza o
+  que a API ainda devolve — nunca reconcilia o que sumiu). Corrigido no
+  orquestrador (`reconciliarTitulosRemovidos` em `orchestrator.ts`): ao
+  final de sincronizar `pagamentos`/`recebimentos`, todo título local ainda
+  em aberto dentro da janela pesquisada cujo `erpId` não veio na resposta é
+  marcado como `CANCELADO` (nunca apagado, preserva auditoria). Os KPIs de
+  "em aberto" (`totalAPagar`, `totalAReceber`, `titulosVencidos`,
+  `saldoProjetado`) agora excluem `canceladoEm` explicitamente.
 - Rodando contra a conta real: 2313 registros criados/atualizados sem
   nenhuma falha de registro (`clientes`, `fornecedores`, `transportadoras`,
   `formas_pagamentos`, `contas_bancarias`, `pagamentos`, `recebimentos`) —

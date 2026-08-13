@@ -24,6 +24,8 @@ export const kpiKeySchema = z.enum([
   'despesasRealizadas',
   'resultadoDoPeriodo',
   'saldoProjetado',
+  'recebidoAteHoje',
+  'gastoAteHoje',
 ]);
 
 export type KpiKey = z.infer<typeof kpiKeySchema>;
