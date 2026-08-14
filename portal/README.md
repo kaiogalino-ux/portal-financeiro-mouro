@@ -56,7 +56,11 @@ npm run dev                  # http://localhost:3000
 
 ### Login de demonstração
 
-Todos com a senha `Mouro@2026` (definida em `prisma/seed.ts`):
+Todos são criados com a senha definida em `SEED_PASSWORD` no `.env` — que
+nunca é versionado, porque este repositório é público e senha em texto no
+código vira senha publicada. Sem essa variável, `db:seed` e
+`db:bootstrap-real` falham de propósito. Depois do primeiro login, troque a
+senha de cada usuário pela tela de Usuários.
 
 | E-mail | Perfil |
 | --- | --- |

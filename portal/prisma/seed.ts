@@ -4,10 +4,20 @@ import { runSync } from '@/server/sync/orchestrator';
 
 const prisma = new PrismaClient();
 
-const SENHA_PADRAO_DEMO = 'Mouro@2026';
+/** Senha inicial dos usuários criados aqui — lida do `.env` (que nunca é
+ * versionado) porque o repositório é público: senha em texto no código vira
+ * senha publicada. Sem a variável definida, o seed para em vez de cair num
+ * padrão fraco e conhecido. */
+function senhaPadrao(): string {
+  const senha = process.env.SEED_PASSWORD;
+  if (!senha) {
+    throw new Error('Defina SEED_PASSWORD no .env antes de rodar o seed (ver .env.example).');
+  }
+  return senha;
+}
 
 async function upsertUsuario(name: string, email: string, role: Parameters<typeof prisma.user.create>[0]['data']['role']) {
-  const passwordHash = await hashPassword(SENHA_PADRAO_DEMO);
+  const passwordHash = await hashPassword(senhaPadrao());
   return prisma.user.upsert({
     where: { email },
     create: { name, email, passwordHash, role },
@@ -89,7 +99,7 @@ async function main() {
   }
 
   console.log('\nSeed concluído. Login de demonstração (mesma senha para todos):');
-  console.log(`  Senha: ${SENHA_PADRAO_DEMO}`);
+  console.log('  Senha: a definida em SEED_PASSWORD no .env');
   console.log('  admin@mourosolucoes.com.br (Administrador)');
   console.log('  Financeiro@mourosolucoes.com.br (Financeiro)');
   console.log('  contabilidade@mourosolucoes.com.br (Contabilidade)');

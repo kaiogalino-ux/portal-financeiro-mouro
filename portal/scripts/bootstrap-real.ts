@@ -9,11 +9,18 @@ import { runSync } from '@/server/sync/orchestrator';
  */
 
 const prisma = new PrismaClient();
-const SENHA_PADRAO_DEMO = 'Mouro@2026';
+
+/** Senha inicial do usuário criado aqui — lida do `.env` (que nunca é
+ * versionado) porque o repositório é público: senha em texto no código vira
+ * senha publicada. */
+const SENHA_PADRAO_DEMO = process.env.SEED_PASSWORD;
 
 async function main() {
   if (process.env.ERP_ADAPTER !== 'gestaoclick') {
     throw new Error('Defina ERP_ADAPTER=gestaoclick no .env antes de rodar este script.');
+  }
+  if (!SENHA_PADRAO_DEMO) {
+    throw new Error('Defina SEED_PASSWORD no .env antes de rodar este script (ver .env.example).');
   }
 
   // CNPJ placeholder — a API do Gestão Click não expõe um endpoint de dados
@@ -41,7 +48,7 @@ async function main() {
     `status=${resultado.status} buscados=${resultado.totalFetched} criados=${resultado.totalCreated} atualizados=${resultado.totalUpdated} falhas=${resultado.totalFailed}`,
   );
   console.log('\nLogin: Financeiro@mourosolucoes.com.br');
-  console.log(`Senha: ${SENHA_PADRAO_DEMO}`);
+  console.log('Senha: a definida em SEED_PASSWORD no .env');
 }
 
 main()
