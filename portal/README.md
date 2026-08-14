@@ -270,10 +270,11 @@ segue sempre este processo, não só na entrega inicial:
    01/01/2026, sem teto de fim). A regra vem do cliente, não de uma
    convenção técnica — perguntar antes de assumir, e assumir explicitamente
    se o corte tem início fixo, fim fixo, os dois, ou nenhum.
-2. **Sempre filtrar `canceladoEm: null`** junto com `liquidado: false` — um
-   título excluído na origem (ver `reconciliarTitulosRemovidos` em
-   `orchestrator.ts`) fica marcado `CANCELADO` localmente e nunca deve
-   entrar em nenhuma soma de "em aberto".
+2. **Sempre filtrar `canceladoEm: null`** — um título excluído na origem
+   (ver `reconciliarTitulosRemovidos` em `orchestrator.ts`) fica marcado
+   `CANCELADO` localmente e nunca deve entrar em nenhuma soma. Vale para os
+   KPIs de "em aberto" **e** para os de realizado: um título já liquidado
+   também pode ser excluído no ERP, e aí some da API igual.
 3. **A mesma condição `where` alimenta a soma do card (`kpis.ts`
    `KPI_DEFINITIONS`) e o drill-down (`detailWhereFor`)** — nunca duas
    implementações da mesma regra; o total do card tem que ser sempre
@@ -329,11 +330,23 @@ segue sempre este processo, não só na entrega inicial:
   como em aberto no banco local pra sempre, porque o upsert só atualiza o
   que a API ainda devolve — nunca reconcilia o que sumiu). Corrigido no
   orquestrador (`reconciliarTitulosRemovidos` em `orchestrator.ts`): ao
-  final de sincronizar `pagamentos`/`recebimentos`, todo título local ainda
-  em aberto dentro da janela pesquisada cujo `erpId` não veio na resposta é
-  marcado como `CANCELADO` (nunca apagado, preserva auditoria). Os KPIs de
-  "em aberto" (`totalAPagar`, `totalAReceber`, `titulosVencidos`,
-  `saldoProjetado`) agora excluem `canceladoEm` explicitamente.
+  final de sincronizar `pagamentos`/`recebimentos`, todo título local dentro
+  da janela pesquisada cujo `erpId` não veio na resposta é marcado como
+  `CANCELADO` (nunca apagado, preserva auditoria). Os KPIs de "em aberto"
+  (`totalAPagar`, `totalAReceber`, `titulosVencidos`, `saldoProjetado`)
+  excluem `canceladoEm` explicitamente.
+- **A reconciliação nasceu olhando só títulos em aberto — e isso deixava
+  passar o mesmo fantasma do lado do realizado.** Achado ao investigar por
+  que "Recebido até hoje" dava R$ 2.874.211,09 contra R$ 2.838.455,42 na
+  tela do Gestão Click: a diferença era exatamente uma NF da PRIO de
+  R$ 35.755,67 lançada em duplicidade (cód. 9535 "PRIO - NFe 001" e cód.
+  9650 "NFe 032 - PRIO", mesmo valor, ambas liquidadas em 06/07/2026) e
+  depois apagada no ERP. Como o título estava `liquidado: true`, a
+  reconciliação nunca olhava para ele e o valor seguia contando pra sempre.
+  A janela agora é comparada contra `dataVencimento` para títulos em aberto
+  e `dataLiquidacao` para liquidados, porque é assim que a API do Gestão
+  Click monta a resposta — comparar tudo por vencimento cancelaria
+  indevidamente um título liquidado cuja baixa cai fora da janela.
 - Rodando contra a conta real: 2313 registros criados/atualizados sem
   nenhuma falha de registro (`clientes`, `fornecedores`, `transportadoras`,
   `formas_pagamentos`, `contas_bancarias`, `pagamentos`, `recebimentos`) —

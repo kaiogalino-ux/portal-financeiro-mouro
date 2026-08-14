@@ -20,11 +20,23 @@ const TITULO_TIPO_POR_RECURSO: Partial<Record<ErpResourceName, TituloTipo>> = {
  * resposta da API pra sempre, mas continuava "em aberto" no banco local
  * pra sempre também, inflando os KPIs de total em aberto silenciosamente.
  * Aqui, ao final de sincronizar `pagamentos`/`recebimentos`, qualquer
- * título local ainda em aberto dentro da janela pesquisada cujo erpId não
- * veio na resposta é marcado como CANCELADO (nunca apagado — mantém o
- * histórico/auditoria).
+ * título local dentro da janela pesquisada cujo erpId não veio na resposta
+ * é marcado como CANCELADO (nunca apagado — mantém o histórico/auditoria).
+ *
+ * Vale tanto para títulos em aberto quanto para liquidados: um título já
+ * baixado que é excluído na origem some da API igual, e continuava contando
+ * pra sempre nos KPIs de realizado ("Recebido/Gasto até hoje"). Foi assim
+ * que uma NF da PRIO lançada em duplicidade e apagada no Gestão Click ficou
+ * inflando o recebido em R$ 35.755,67.
+ *
+ * A janela é comparada contra campos diferentes conforme o estado porque é
+ * assim que a API do Gestão Click filtra: título em aberto entra na janela
+ * pela data de vencimento, título liquidado pela data de liquidação. Usar
+ * só `dataVencimento` cancelaria indevidamente um título liquidado cujo
+ * vencimento cai dentro da janela mas cuja baixa (e portanto sua presença
+ * na resposta) cai fora dela.
  */
-async function reconciliarTitulosRemovidos(
+export async function reconciliarTitulosRemovidos(
   empresaId: string,
   tipo: TituloTipo,
   janela: { dateFrom?: string; dateTo?: string },
@@ -32,14 +44,19 @@ async function reconciliarTitulosRemovidos(
 ): Promise<number> {
   if (!janela.dateFrom || !janela.dateTo) return 0;
 
+  const inicio = new Date(`${janela.dateFrom}T00:00:00`);
+  const fim = new Date(`${janela.dateTo}T23:59:59`);
+
   const resultado = await prisma.titulo.updateMany({
     where: {
       empresaId,
       tipo,
-      liquidado: false,
       canceladoEm: null,
-      dataVencimento: { gte: new Date(`${janela.dateFrom}T00:00:00`), lte: new Date(`${janela.dateTo}T23:59:59`) },
       erpId: { notIn: [...erpIdsVistos] },
+      OR: [
+        { liquidado: false, dataVencimento: { gte: inicio, lte: fim } },
+        { liquidado: true, dataLiquidacao: { gte: inicio, lte: fim } },
+      ],
     },
     data: { canceladoEm: new Date() },
   });
@@ -236,7 +253,7 @@ export async function runSync(empresaId: string, options: RunSyncOptions): Promi
               syncRunId: syncRun.id,
               syncRunResource: resource,
               level: 'INFO',
-              message: `${removidos} título(s) em aberto não retornaram mais da API dentro da janela pesquisada — marcados como CANCELADO (removidos na origem).`,
+              message: `${removidos} título(s) não retornaram mais da API dentro da janela pesquisada — marcados como CANCELADO (removidos na origem).`,
             },
           });
         }
