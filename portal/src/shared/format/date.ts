@@ -34,6 +34,24 @@ export function formatMonthLabel(value: Date | string): string {
   return monthLabelFormatter.format(new Date(value)).replace('.', '');
 }
 
+const MESES_ABREV = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+
+/**
+ * 'AGO/26' a partir da chave de calendário 'AAAA-MM'.
+ *
+ * Não passa por `Date` de propósito: a chave já é um mês de calendário, e
+ * converter para Date e de volta só abriria chance de escorregar um mês na
+ * virada por causa de fuso (é o tipo de bug que só aparece em produção,
+ * quando o servidor não roda no mesmo fuso da máquina de quem desenvolveu).
+ */
+export function formatMonthKeyLabel(mesKey: string): string {
+  const [ano, mes] = mesKey.split('-');
+  const indice = Number(mes) - 1;
+  const nome = MESES_ABREV[indice];
+  if (!nome || !ano) return mesKey;
+  return `${nome}/${ano.slice(2)}`;
+}
+
 /** Data-only (sem hora) tratada como calendário — usada em dataVencimento/dataCompetencia. */
 export function parseCalendarDate(value: string): Date {
   return new Date(`${value}T00:00:00`);

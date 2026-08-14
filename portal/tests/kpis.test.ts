@@ -15,8 +15,14 @@ interface WhereKpi {
   dataCompetencia?: { gte?: Date; lte?: Date };
 }
 
+/** Só os campos que `getKpiPorMesVencimento` seleciona. */
+interface TituloParaQuebra {
+  dataVencimento: Date;
+  valorTotal: number;
+}
+
 const aggregate = vi.fn(async (_args: { where: WhereKpi }) => ({ _sum: { valorTotal: null } }));
-const findMany = vi.fn(async (_args: { where: WhereKpi }) => []);
+const findMany = vi.fn(async (_args: { where: WhereKpi }): Promise<TituloParaQuebra[]> => []);
 const count = vi.fn(async (_args: { where: WhereKpi }) => 0);
 
 vi.mock('@/server/db/prisma', () => ({
@@ -31,7 +37,7 @@ vi.mock('@/server/auth/auth', () => ({
   auth: async () => ({ user: { id: 'u1', role: 'ADMINISTRADOR', active: true } }),
 }));
 
-const { getKpi, getKpiDetalhe } = await import('@/server/dashboard/kpis');
+const { getKpi, getKpiDetalhe, getKpiPorMesVencimento } = await import('@/server/dashboard/kpis');
 
 const FILTROS = { regime: 'caixa' as const };
 
@@ -151,6 +157,50 @@ describe('totais em aberto', () => {
     expect(where.liquidado).toBe(false);
     expect(where.canceladoEm).toBeNull();
     expect(where.dataVencimento!.lt).toBeDefined();
+  });
+});
+
+describe('getKpiPorMesVencimento', () => {
+  const titulo = (dataVencimento: string, valorTotal: number): TituloParaQuebra => ({
+    dataVencimento: new Date(`${dataVencimento}T00:00:00`),
+    valorTotal,
+  });
+
+  it('agrupa por mês de vencimento e devolve em ordem cronológica', async () => {
+    findMany.mockResolvedValueOnce([
+      titulo('2026-09-10', 100),
+      titulo('2026-08-05', 30),
+      titulo('2026-09-25', 400),
+      titulo('2026-08-20', 70),
+    ]);
+
+    expect(await getKpiPorMesVencimento('totalAReceber', FILTROS)).toEqual([
+      { mes: '2026-08', valor: 100 },
+      { mes: '2026-09', valor: 500 },
+    ]);
+  });
+
+  it('usa o mesmo where do card, para a soma das partes ser sempre o total', async () => {
+    findMany.mockClear();
+    await getKpiPorMesVencimento('totalAPagar', FILTROS);
+    const whereDaQuebra = primeiroWhere(findMany.mock.calls, 'getKpiPorMesVencimento(totalAPagar)');
+
+    expect(whereDaQuebra).toEqual(await whereDoCard('totalAPagar'));
+  });
+
+  it('não escorrega de mês na virada, independente do fuso do servidor', async () => {
+    // Agrupar por toISOString jogaria 01/09 para agosto num servidor a leste
+    // de Greenwich, porque a data é gravada como meia-noite local.
+    findMany.mockResolvedValueOnce([titulo('2026-09-01', 10), titulo('2026-08-31', 20)]);
+
+    expect(await getKpiPorMesVencimento('totalAReceber', FILTROS)).toEqual([
+      { mes: '2026-08', valor: 20 },
+      { mes: '2026-09', valor: 10 },
+    ]);
+  });
+
+  it('devolve vazio para KPI que não soma títulos', async () => {
+    expect(await getKpiPorMesVencimento('faturamentoDoMes', FILTROS)).toEqual([]);
   });
 });
 

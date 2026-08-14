@@ -1,4 +1,4 @@
-import { getKpi } from '@/server/dashboard/kpis';
+import { getKpi, getKpiPorMesVencimento } from '@/server/dashboard/kpis';
 import {
   getFluxoCaixaProjetado, getIndicadoresPrevisao, getPrincipaisClientes,
   getPrincipaisFornecedores, getResultadoPorCentroCusto,
@@ -25,6 +25,11 @@ interface DashboardPageProps {
  * calculáveis via getKpi, só não aparecem aqui. */
 const DASHBOARD_KPI_KEYS: KpiKey[] = ['recebidoAteHoje', 'gastoAteHoje', 'totalAReceber', 'totalAPagar'];
 
+/** Cards que ganham a quebra por mês de vencimento embaixo do valor — só faz
+ * sentido nos totais em aberto, que olham para vencimentos futuros; os
+ * acumulados já são, por definição, o passado fechado. */
+const KPI_KEYS_COM_QUEBRA_MENSAL: KpiKey[] = ['totalAReceber', 'totalAPagar'];
+
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const rawParams = await searchParams;
   const filters = dashboardFiltersSchema.parse(rawParams);
@@ -39,6 +44,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     principaisFornecedores,
     resultadoPorCentro,
     indicadoresPrevisao,
+    quebrasMensais,
   ] = await Promise.all([
     listEmpresasLookup(),
     listCentrosCustoLookup(filters.empresaId),
@@ -49,8 +55,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     getPrincipaisFornecedores(filters),
     getResultadoPorCentroCusto(filters),
     getIndicadoresPrevisao(filters),
+    Promise.all(
+      KPI_KEYS_COM_QUEBRA_MENSAL.map(async (key) => [key, await getKpiPorMesVencimento(key, filters)] as const),
+    ),
   ]);
 
+  const quebraPorKpi = new Map(quebrasMensais);
   const maiorResultadoAbsoluto = Math.max(1, ...resultadoPorCentro.map((r) => Math.abs(r.resultado)));
 
   return (
@@ -59,7 +69,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {kpis.map((kpi) => (
-          <KpiCard key={kpi.key} result={kpi} filters={filters} />
+          <KpiCard key={kpi.key} result={kpi} filters={filters} porMes={quebraPorKpi.get(kpi.key)} />
         ))}
       </div>
 

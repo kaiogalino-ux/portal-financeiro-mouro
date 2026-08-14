@@ -7,8 +7,9 @@ import { InfoTooltip } from '@/components/ui/Tooltip';
 import { Sheet } from '@/components/ui/Sheet';
 import { InlineErrorState, Skeleton } from '@/components/ui/States';
 import { formatBRL, formatPercent } from '@/shared/format/currency';
-import type { DashboardFilters } from '@/shared/schemas/dashboard.schema';
-import type { DrilldownResult, KpiResult } from '@/shared/types/dashboard.types';
+import { formatMonthKeyLabel } from '@/shared/format/date';
+import type { DashboardFilters, KpiKey } from '@/shared/schemas/dashboard.schema';
+import type { DrilldownResult, KpiMesValor, KpiResult } from '@/shared/types/dashboard.types';
 import { KPI_HELP, KPI_LABELS } from '@/shared/types/dashboard.types';
 import { DrilldownTable } from './DrilldownTable';
 
@@ -27,7 +28,16 @@ function buildQuery(filters: DashboardFilters, page: number): string {
   return params.toString();
 }
 
-export function KpiCard({ result, filters }: { result: KpiResult; filters: DashboardFilters }) {
+export function KpiCard({
+  result,
+  filters,
+  porMes,
+}: {
+  result: KpiResult;
+  filters: DashboardFilters;
+  /** Quebra do total por mês de vencimento — só os cards de "em aberto" recebem. */
+  porMes?: KpiMesValor[];
+}) {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [detalhe, setDetalhe] = useState<DrilldownResult | null>(null);
@@ -75,6 +85,7 @@ export function KpiCard({ result, filters }: { result: KpiResult; filters: Dashb
           >
             <p className={`font-display text-2xl font-medium ${valueColor}`}>{formatBRL(result.valor)}</p>
           </button>
+          {porMes && porMes.length > 0 && <QuebraPorMes keyKpi={result.key} porMes={porMes} />}
           <div className="mt-2 flex gap-3 text-xs">
             <DeltaIndicator label="vs mês anterior" value={result.comparacaoMesAnterior} />
             <DeltaIndicator label="vs ano anterior" value={result.comparacaoAnoAnterior} />
@@ -129,6 +140,39 @@ export function KpiCard({ result, filters }: { result: KpiResult; filters: Dashb
         )}
       </Sheet>
     </>
+  );
+}
+
+/**
+ * Linha miúda abaixo do valor dizendo *quando* aquele dinheiro entra ou sai
+ * — o total sozinho não distingue "entra este mês" de "entra em seis".
+ *
+ * Os dois cards pedem leituras diferentes: em Contas a Receber os meses são
+ * poucos e olham pra frente, então cada um aparece com seu valor; em Contas
+ * a Pagar a janela é fixa (dez/2025 até o fim do mês vigente) e quase tudo
+ * já venceu, então nove linhas de valor viram ruído e o que interessa é o
+ * período que o número cobre.
+ */
+function QuebraPorMes({ keyKpi, porMes }: { keyKpi: KpiKey; porMes: KpiMesValor[] }) {
+  if (keyKpi === 'totalAPagar') {
+    const primeiro = formatMonthKeyLabel(porMes[0]!.mes);
+    const ultimo = formatMonthKeyLabel(porMes[porMes.length - 1]!.mes);
+    return (
+      <p className="mt-2 text-[11px] uppercase tracking-wide text-muted/70">
+        Vencimentos {primeiro === ultimo ? primeiro : `${primeiro} – ${ultimo}`}
+      </p>
+    );
+  }
+
+  return (
+    <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+      {porMes.map(({ mes, valor }) => (
+        <li key={mes} className="flex items-baseline gap-1">
+          <span className="uppercase tracking-wide text-muted/70">{formatMonthKeyLabel(mes)}</span>
+          <span className="font-mono-num text-muted">{formatBRL(valor)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

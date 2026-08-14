@@ -4,7 +4,7 @@ import { withAuthz } from '@/server/data-access/withAuthz';
 import { todayInSaoPaulo } from '@/shared/format/date';
 import type { DashboardFilters } from '@/shared/schemas/dashboard.schema';
 import type { KpiKey } from '@/shared/schemas/dashboard.schema';
-import type { DrilldownResult, KpiResult } from '@/shared/types/dashboard.types';
+import type { DrilldownResult, KpiMesValor, KpiResult } from '@/shared/types/dashboard.types';
 import { getIsDataSimulated } from './dataProvenance';
 import { buildTituloWhere } from './filters';
 import { mapTituloToDrilldownRow, TITULO_DRILLDOWN_INCLUDE } from './mapDrilldown';
@@ -263,6 +263,43 @@ function detailWhereFor(key: KpiKey, filters: DashboardFilters) {
       return null; // usa notaFiscal, não titulo — ver getKpiDetalhe abaixo.
   }
 }
+
+/**
+ * Quebra o total de um card por mês de vencimento — o "quando" que o número
+ * cheio esconde: "Contas a Receber R$ 653 mil" não diz se entra este mês ou
+ * daqui a seis.
+ *
+ * Reusa `detailWhereFor`, o mesmo `where` do card e do drill-down, então a
+ * soma das fatias é sempre exatamente o valor mostrado — nunca duas leituras
+ * concorrentes da mesma regra.
+ *
+ * Agrupa pelos componentes locais da data (não por `toISOString`) porque as
+ * datas são gravadas como meia-noite local: converter para UTC empurraria um
+ * vencimento de 1º de setembro para agosto num servidor a leste de Greenwich.
+ */
+export const getKpiPorMesVencimento = withAuthz(
+  'dashboard',
+  'read',
+  async (_session, key: KpiKey, filters: DashboardFilters): Promise<KpiMesValor[]> => {
+    const where = detailWhereFor(key, filters);
+    if (!where) return [];
+
+    const titulos = await prisma.titulo.findMany({
+      where,
+      select: { dataVencimento: true, valorTotal: true },
+    });
+
+    const porMes = new Map<string, number>();
+    for (const titulo of titulos) {
+      const mes = `${titulo.dataVencimento.getFullYear()}-${String(titulo.dataVencimento.getMonth() + 1).padStart(2, '0')}`;
+      porMes.set(mes, (porMes.get(mes) ?? 0) + toNumber(titulo.valorTotal));
+    }
+
+    return [...porMes.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, valor]) => ({ mes, valor }));
+  },
+);
 
 export const getKpiDetalhe = withAuthz(
   'dashboard',

@@ -8,6 +8,14 @@ export interface KpiResult {
   isSimulated: boolean;
 }
 
+/** Uma fatia do total de um card, por mês de vencimento. `mes` é a chave de
+ * calendário 'AAAA-MM' (ordenável como texto); o rótulo bonito sai de
+ * `formatMonthKeyLabel`. */
+export interface KpiMesValor {
+  mes: string;
+  valor: number;
+}
+
 export interface TituloDrilldownRow {
   id: string;
   tipo: 'PAGAR' | 'RECEBER';
@@ -51,16 +59,16 @@ export interface IndicadorPrevisao {
 }
 
 export const KPI_LABELS: Record<KpiKey, string> = {
-  totalAPagar: 'Total a pagar',
-  totalAReceber: 'Total a receber',
+  totalAPagar: 'Contas a Pagar',
+  totalAReceber: 'Contas a Receber',
   titulosVencidos: 'Títulos vencidos',
   faturamentoDoMes: 'Faturamento do mês',
   receitasRealizadas: 'Receitas realizadas',
   despesasRealizadas: 'Despesas realizadas',
   resultadoDoPeriodo: 'Resultado do período',
   saldoProjetado: 'Saldo projetado',
-  recebidoAteHoje: 'Recebido até hoje',
-  gastoAteHoje: 'Gasto até hoje',
+  recebidoAteHoje: 'Receita (acumulada)',
+  gastoAteHoje: 'Despesas (acumulada)',
 };
 
 /** Recorte que vale para TODOS os indicadores (ver server/dashboard/filters.ts).
