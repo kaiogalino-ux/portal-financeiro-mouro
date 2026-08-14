@@ -63,6 +63,11 @@ export const KPI_LABELS: Record<KpiKey, string> = {
   gastoAteHoje: 'Gasto até hoje',
 };
 
+/** Recorte que vale para TODOS os indicadores (ver server/dashboard/filters.ts).
+ * Fica no fim de cada tooltip para quem for comparar com o Gestão Click. */
+const RECORTE_COMUM =
+  ' Considera apenas a conta Bradesco e pagamentos por boleto, PIX ou transferência — compras no cartão não entram aqui porque já entram na fatura do cartão.';
+
 export const KPI_HELP: Record<KpiKey, string> = {
   totalAPagar:
     'Soma dos títulos a pagar ainda não liquidados com vencimento entre 01/12/2025 e o fim do mês atual. Não inclui vencimentos anteriores a dez/2025 nem posteriores ao mês vigente.',
@@ -80,3 +85,8 @@ export const KPI_HELP: Record<KpiKey, string> = {
   gastoAteHoje:
     'Soma dos títulos a pagar já liquidados dentro do ano vigente, do dia 01/01 até o fim do último mês fechado. O mês vigente nunca entra, porque ainda pode receber baixas até terminar.',
 };
+
+for (const chave of Object.keys(KPI_HELP) as KpiKey[]) {
+  // faturamentoDoMes lê notas fiscais, não títulos — o recorte não se aplica.
+  if (chave !== 'faturamentoDoMes') KPI_HELP[chave] += RECORTE_COMUM;
+}

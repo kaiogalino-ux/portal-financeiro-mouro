@@ -229,6 +229,31 @@ define é convite a interpretação errada.
 **Os três últimos exigem o portal publicado com HTTPS** — chamam de fora e
 não alcançam `localhost`. Defina `PORTAL_PUBLIC_URL` quando publicar.
 
+## Recorte global dos dados (vale para TODO indicador, gráfico e listagem)
+
+Aplicado num único lugar — `buildTituloWhere` em
+`src/server/dashboard/filters.ts` — e por isso automaticamente válido em
+todos os KPIs, gráficos, drill-downs, páginas de Contas a Pagar/Receber e
+na API pública. Dois filtros, ambos confirmados com o cliente:
+
+1. **Somente a conta bancária `Bradesco`.** Outras contas do cadastro
+   (`Conta Claudio`, `Conta bancária`) nunca entram em número nenhum.
+2. **Somente as formas de pagamento `Boleto Bancário`, `PIX` e
+   `Transferência Bancária`** — as que de fato movimentam a conta. É uma
+   lista de **permissão**, não de bloqueio: forma nova cadastrada no ERP
+   fica de fora até ser avaliada, em vez de entrar sozinha nos números.
+
+O item 2 não é só para espelhar o relatório nativo do Gestão Click (que
+aplica exatamente este recorte) — é para **não contar o mesmo gasto duas
+vezes**: uma compra no cartão de crédito é lançada como título próprio *e*
+reaparece na fatura do cartão, essa sim paga por boleto saindo do Bradesco.
+Em jan–jul/2026 eram 16 compras no cartão + 1 em dinheiro, R$ 23.907,62 de
+dupla contagem — era exatamente a diferença contra o relatório do ERP.
+
+**Ao revisar:** `Cartão de Débito` e `Cheque` existem no cadastro do ERP e
+movimentam a conta, mas hoje nenhum título os usa. Se passarem a ser
+usados, precisam entrar na lista, senão os totais ficam subestimados.
+
 ## Como definir/ajustar um total (KPI) financeiro em aberto
 
 Todo KPI de "em aberto" (`totalAPagar`, `totalAReceber`, `titulosVencidos`,
