@@ -1,86 +1,104 @@
 # Publicar o portal
 
-## Antes de escolher a plataforma
+## Arquitetura recomendada
 
-O portal precisa de três coisas para funcionar de verdade:
+Três peças, cada uma no serviço em que ela é gratuita e sem atrito:
 
-1. **Um PostgreSQL** — todos os dados do portal vivem nele. O `docker-compose.yml`
-   sobe um só para desenvolvimento; em produção ele precisa de um banco de verdade,
-   com backup.
-2. **A sincronização diária com o Gestão Click** (`npm run sync:diario`) — é o que
-   mantém os números atualizados. Sem ela o portal congela no último sync.
-3. **Migrações aplicadas** (`npx prisma migrate deploy`) a cada release que mexa no
-   schema.
+| Peça | Onde | Por quê |
+| --- | --- | --- |
+| Banco | **Supabase** | Postgres gerenciado, com backup e pooler |
+| Site | **Vercel** | Publica sozinho a cada push na `main` |
+| Sincronização diária | **Render** (Cron Job) | Sem limite de tempo de execução |
 
-O item 2 é o que decide a plataforma. A sincronização varre uma janela de 20 anos
-para trás e 10 à frente (`SYNC_LOOKBACK_DAYS` / `SYNC_LOOKAHEAD_DAYS`) e pode levar
-minutos.
+A sincronização fica **fora do Vercel** de propósito. `scripts/sync-diario.ts`
+conversa direto com o Postgres e com o Gestão Click — não precisa do servidor web
+—, e varre uma janela de 20 anos para trás e 10 à frente
+(`SYNC_LOOKBACK_DAYS` / `SYNC_LOOKAHEAD_DAYS`). Isso passa fácil do limite de
+função serverless do Vercel (60s no Hobby, 300s no Pro). No Render ela roda como
+job de verdade, sem cronômetro.
 
-## Vercel
+Se preferir tudo num lugar só, o Render também hospeda o site (o projeto já tem
+`Dockerfile` e `output: 'standalone'`). Aí o Vercel sai da jogada.
 
-Funciona, com ressalvas. Passos:
+---
 
-### 1. Banco de dados (fora do Vercel)
+## 1. Supabase — banco
 
-Vercel não hospeda banco. Crie um Postgres em Neon, Supabase ou Vercel Postgres.
-**Use a string de conexão com pooling** (`-pooler` no host, no caso do Neon):
-serverless abre uma conexão por invocação e um Postgres sem pooler esgota o limite
-rápido.
+Crie o projeto e pegue **as duas** strings de conexão em *Project Settings →
+Database*:
 
-### 2. Importar o repositório
+| Variável | Qual string | Porta |
+| --- | --- | --- |
+| `DATABASE_URL` | Connection pooling (Transaction) | 6543 |
+| `DIRECT_URL` | Direct connection | 5432 |
+
+Na `DATABASE_URL`, acrescente `?pgbouncer=true&connection_limit=1`.
+
+Não é preciosismo: serverless abre uma conexão por invocação, e sem pooler o
+Postgres esgota o limite. Já as **migrações não rodam através do pooler** em modo
+transação — por isso as duas. O `schema.prisma` já está preparado para esse par.
+
+## 2. Migrações e usuários (uma vez só)
+
+Da sua máquina, com as duas variáveis apontando para o Supabase:
+
+```
+npx prisma migrate deploy
+npm run db:seed
+```
+
+São 3 migrações. O seed cria os cinco usuários (um por perfil).
+**Troque a senha de cada um** na tela de Usuários depois do primeiro acesso — a
+senha do seed é a mesma para todos.
+
+## 3. Vercel — site
+
+Importe o repositório e configure:
 
 - **Root Directory: `portal`** — obrigatório. A raiz do repositório é o projeto de
   integração com o Gestão Click, não o Next.
 - Framework: Next.js (detectado sozinho).
-- O build já roda `prisma generate` (ver `package.json`); não precisa configurar nada.
+- O build já roda `prisma generate`; nada a configurar.
 
-### 3. Variáveis de ambiente
+Variáveis de ambiente:
 
-Copie de `.env.example`. As obrigatórias:
-
-| Variável | Observação |
+| Variável | Valor |
 | --- | --- |
-| `DATABASE_URL` | String **com pooling** do provedor escolhido |
-| `AUTH_SECRET` | Gere um novo com `npx auth secret` — **não reaproveite o de desenvolvimento** |
-| `AUTH_URL` | A URL publicada (ex.: `https://seu-app.vercel.app`) |
-| `ERP_ADAPTER` | `gestaoclick` para dados reais |
-| `GESTAOCLICK_ACCESS_TOKEN` | Credencial do ERP |
-| `GESTAOCLICK_SECRET_ACCESS_TOKEN` | Credencial do ERP |
-| `SEED_PASSWORD` | Só para criar os usuários iniciais |
-| `PORTAL_PUBLIC_URL` | Mesma URL publicada |
+| `DATABASE_URL` | String com pooling (porta 6543) |
+| `DIRECT_URL` | String direta (porta 5432) |
+| `AUTH_SECRET` | **Gere um novo**: `npx auth secret`. Nunca o de desenvolvimento |
+| `AUTH_URL` | A URL publicada |
+| `PORTAL_PUBLIC_URL` | A mesma URL publicada |
+| `ERP_ADAPTER` | `gestaoclick` |
+| `GESTAOCLICK_ACCESS_TOKEN` | Já existe no `.env` local |
+| `GESTAOCLICK_SECRET_ACCESS_TOKEN` | Já existe no `.env` local |
 
-O repositório é **público** — nenhum desses valores pode entrar em arquivo versionado.
+`AUTH_URL` e `PORTAL_PUBLIC_URL` só se sabem depois do primeiro deploy: publique,
+copie a URL, preencha as duas e publique de novo.
 
-### 4. Migrações e usuários (uma vez)
+O repositório é **público** — nenhum desses valores pode entrar em arquivo
+versionado.
 
-Rode da sua máquina, apontando `DATABASE_URL` para o banco de produção:
+## 4. Render — sincronização diária
 
-```
-npx prisma migrate deploy
-npm run db:seed          # ou db:bootstrap-real
-```
+Novo **Cron Job** apontando para este repositório:
 
-Depois **troque a senha de cada usuário** pela tela de Usuários. A senha do seed é
-a mesma para todos e serve só para o primeiro acesso.
+- Root Directory: `portal`
+- Build: `npm ci && npx prisma generate`
+- Comando: `npm run sync:diario`
+- Agenda: `0 6 * * *` (06:00 todo dia; ajuste ao seu fuso)
 
-### 5. Sincronização diária
+Variáveis: `DATABASE_URL`, `DIRECT_URL`, `ERP_ADAPTER`, as duas do Gestão Click e
+as duas de janela (`SYNC_LOOKBACK_DAYS`, `SYNC_LOOKAHEAD_DAYS`). Não precisa de
+`AUTH_SECRET` — o job não serve HTTP.
 
-Vercel não roda scripts de terminal agendados. Seria preciso:
+Cada execução aparece na tela de Sincronizações do portal, igual às manuais.
 
-- expor a sincronização como rota de API protegida,
-- agendar com Vercel Cron,
-- e caber no **limite de tempo da função** (60s no plano Hobby, até 300s no Pro).
+---
 
-**É aqui que costuma quebrar.** A sincronização completa pode passar disso. Se
-passar, as opções são: reduzir a janela de dias, quebrar o sync em lotes, ou rodar
-o sync fora do Vercel (uma máquina qualquer com `cron` chamando a rota).
+## Publicar sem sair da máquina não funciona no Windows
 
-## Alternativa: container
-
-O projeto já tem `Dockerfile` e `output: 'standalone'` no `next.config.ts` — foi
-desenhado para container. Railway, Render ou uma VPS hospedam **o app e o Postgres
-juntos** e rodam a sincronização como job agendado de verdade, sem limite de
-tempo e sem precisar reescrever nada.
-
-Se a sincronização diária for essencial (e é: sem ela os números param no tempo),
-essa via costuma dar menos trabalho que o Vercel.
+`vercel deploy` compila localmente e cria links simbólicos, o que o Windows
+bloqueia sem Modo Desenvolvedor (`EPERM: operation not permitted, symlink`).
+Não contorne isso: pelo fluxo normal, o Vercel compila nos servidores dele a
+partir do GitHub e o problema não existe.
