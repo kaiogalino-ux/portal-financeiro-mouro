@@ -12,3 +12,6 @@ coverage/
 # Prisma Client é gerado por `npm run db:generate` — inclui binário do
 # query engine (dezenas de MB, específico por plataforma), nunca versionar.
 src/generated/
+
+# Vínculo local com o projeto na Vercel e saída de build do CLI.
+.vercel
