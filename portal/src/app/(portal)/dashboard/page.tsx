@@ -1,3 +1,4 @@
+import { CalendarDays, Lock, Share2, ShieldCheck, Target, TrendingDown } from 'lucide-react';
 import { getKpi, getKpiPorMesVencimento } from '@/server/dashboard/kpis';
 import {
   getFluxoCaixaProjetado, getIndicadoresPrevisao, getPrincipaisClientes,
@@ -65,18 +66,39 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   return (
     <div>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-[40px] font-bold uppercase leading-[0.92] tracking-[-0.04em] text-ink min-[1600px]:text-[66px] lg:text-[54px]">
+            Fluxo de caixa
+            <br />
+            <span className="text-brass">projetado</span>
+          </h1>
+          <p className="mt-2.5 text-[15px] text-muted min-[1600px]:text-[17px]">Visão estratégica para decisões inteligentes</p>
+        </div>
+        <Card className="flex items-center gap-3.5 px-5 py-4">
+          <span className="flex h-12 w-12 items-center justify-center rounded-lg border border-brass/25 bg-brass/10 text-brass">
+            <CalendarDays size={24} strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <div>
+            <p className="font-display text-sm font-bold uppercase tracking-[0.03em] text-ink">Planejar hoje</p>
+            <p className="mt-0.5 font-display text-[13px] font-bold uppercase tracking-[0.03em] text-brass">Transformar o amanhã.</p>
+          </div>
+        </Card>
+      </div>
       <GlobalFilterBar filters={filters} empresas={empresas} centrosCusto={centrosCusto} categorias={categorias} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpis.map((kpi) => (
           <KpiCard key={kpi.key} result={kpi} filters={filters} porMes={quebraPorKpi.get(kpi.key)} />
         ))}
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Fluxo de caixa projetado (próximos meses)</CardTitle>
+            <CardTitle>
+              Fluxo de caixa projetado <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">Próximos meses</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ComboBarLineChart data={fluxoCaixa} />
@@ -92,21 +114,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Card>
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Principais clientes (a receber)</CardTitle>
+            <CardTitle>
+              Principais clientes <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">A receber</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {principaisClientes.length ? <DonutChart data={principaisClientes} /> : <EmptyState />}
+            {principaisClientes.length ? <DonutChart data={principaisClientes} tone="favorable" /> : <EmptyState />}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Principais fornecedores (a pagar)</CardTitle>
+            <CardTitle>
+              Principais fornecedores <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">A pagar</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {principaisFornecedores.length ? <DonutChart data={principaisFornecedores} /> : <EmptyState />}
+            {principaisFornecedores.length ? <DonutChart data={principaisFornecedores} tone="alert" /> : <EmptyState />}
           </CardContent>
         </Card>
         <Card>
@@ -119,21 +145,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Card>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-4">
         <Card>
           <CardHeader>
             <CardTitle>Resultado por centro de custo (realizado no período)</CardTitle>
           </CardHeader>
           <CardContent>
             {resultadoPorCentro.length ? (
-              <ul className="space-y-2">
+              <ul className="grid grid-cols-1 gap-x-7 gap-y-2.5 lg:grid-cols-2 min-[1600px]:grid-cols-3">
                 {resultadoPorCentro.map((item) => {
                   const largura = (Math.abs(item.resultado) / maiorResultadoAbsoluto) * 100;
                   const favoravel = item.resultado >= 0;
                   return (
-                    <li key={item.nome} className="grid grid-cols-[1fr_auto] items-center gap-3 text-sm">
-                      <div>
-                        <p className="mb-1 text-muted">{item.nome}</p>
+                    <li key={item.nome} className="grid grid-cols-[1fr_auto] items-center gap-3 text-[13px]">
+                      <div className="min-w-0">
+                        <p className="mb-1 truncate text-muted" title={item.nome}>{item.nome}</p>
                         <div className="h-1.5 rounded-full bg-surface-2">
                           <div
                             className={`h-1.5 rounded-full ${favoravel ? 'bg-favorable' : 'bg-alert'}`}
@@ -154,6 +180,37 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardContent>
         </Card>
       </div>
+
+      <PrincipiosFaixa />
     </div>
+  );
+}
+
+/**
+ * Faixa de fechamento da referência: mensagem da marca sobre por que planejar
+ * caixa. É texto institucional, não indicador — de propósito não tem número,
+ * para ninguém confundir com um dado do ERP.
+ */
+const PRINCIPIOS = [
+  { Icon: ShieldCheck, texto: 'Fluxo de caixa projetado não é sorte, é estratégia.', destaque: true },
+  { Icon: Target, texto: 'Previsibilidade financeira' },
+  { Icon: TrendingDown, texto: 'Redução de riscos' },
+  { Icon: Share2, texto: 'Apoio na tomada de decisão' },
+  { Icon: Lock, texto: 'Segurança para investir e crescer' },
+];
+
+function PrincipiosFaixa() {
+  return (
+    <Card className="mt-4 grid grid-cols-1 gap-y-4 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 xl:gap-y-0">
+      {PRINCIPIOS.map(({ Icon, texto, destaque }, indice) => (
+        <div
+          key={texto}
+          className={`flex items-center gap-3 px-1 xl:px-4 ${indice > 0 ? 'xl:border-l xl:border-border' : ''}`}
+        >
+          <Icon size={26} strokeWidth={1.6} className="shrink-0 text-brass" aria-hidden="true" />
+          <p className={`text-[13px] leading-snug ${destaque ? 'font-semibold text-ink' : 'text-muted'}`}>{texto}</p>
+        </div>
+      ))}
+    </Card>
   );
 }

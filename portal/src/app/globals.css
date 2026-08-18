@@ -11,24 +11,42 @@
   --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
 
-  --color-bg: #0a0f1c;
-  --color-surface: #10192b;
-  --color-surface-2: #182335;
-  --color-border: #26334a;
-  --color-brass: #c6a15b;
-  --color-brass-soft: #8a7248;
-  --color-ink: #e7ecf3;
-  --color-muted: #8b98af;
-  --color-favorable: #34d399;
-  --color-favorable-soft: #0f2c22;
-  --color-alert: #f16565;
-  --color-alert-soft: #2c1414;
-  --color-neutral: #5b7ba8;
-  --color-neutral-soft: #151f2c;
+  --color-bg: #0d0f0e;
+  --color-surface: #151817;
+  --color-surface-2: #1d211f;
+  --color-border: #303532;
+  --color-brass: #ff5a2a;
+  --color-brass-soft: #df431b;
+  --color-ink: #f7f7f5;
+  --color-muted: #9ca39f;
+  --color-favorable: #51bc66;
+  --color-favorable-soft: #142c1b;
+  --color-alert: #ff4e43;
+  --color-alert-soft: #351816;
+  --color-neutral: #aeb4b0;
+  --color-neutral-soft: #242826;
 }
 
 :root {
   color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-bg: #f4f5f2;
+  --color-surface: #ffffff;
+  --color-surface-2: #f7f8f5;
+  --color-border: #dfe2de;
+  --color-brass: #f4511e;
+  --color-brass-soft: #d83c10;
+  --color-ink: #171918;
+  --color-muted: #68706c;
+  --color-favorable: #218a47;
+  --color-favorable-soft: #e8f5ec;
+  --color-alert: #d9362b;
+  --color-alert-soft: #fff0ed;
+  --color-neutral: #5d6661;
+  --color-neutral-soft: #edf0ed;
 }
 
 html,
@@ -36,10 +54,80 @@ body {
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 * {
   border-color: var(--color-border);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brass) 26%, transparent);
+}
+
+/* O toggle mora dentro da sidebar, que é grafite nos DOIS temas — por isso as
+ * cores aqui são fixas (tons de branco), não os tokens que mudam com o tema. */
+.theme-toggle {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.5rem 0.65rem;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--color-brass);
+}
+
+.theme-toggle-track {
+  position: relative;
+  display: block;
+  width: 2rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.theme-toggle-thumb {
+  position: absolute;
+  left: 0.125rem;
+  top: 0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  background: var(--color-brass);
+  transition: transform 180ms ease;
+}
+
+.theme-sun { color: rgba(255, 255, 255, 0.45); }
+.theme-moon { color: var(--color-brass); }
+
+:root[data-theme='light'] .theme-toggle-thumb { transform: translateX(1rem); }
+:root[data-theme='light'] .theme-sun { color: var(--color-brass); }
+:root[data-theme='light'] .theme-moon { color: rgba(255, 255, 255, 0.45); }
+
+.mouro-sidebar {
+  border-color: #303532;
+  background: #121513;
+}
+
+/* Símbolo da marca em PNG não muda de cor sozinho: mostramos a versão branca
+ * no tema escuro e a escura no tema claro. Ver components/brand/MouroMark. */
+.marca-tema-claro { display: none; }
+:root[data-theme='light'] .marca-tema-claro { display: block; }
+:root[data-theme='light'] .marca-tema-escuro { display: none; }
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 2px;
 }
 
 .font-display {

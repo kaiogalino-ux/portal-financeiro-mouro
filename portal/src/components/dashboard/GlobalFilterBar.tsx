@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { ChangeEvent } from 'react';
+import { cn } from '@/lib/cn';
 import type { DashboardFilters } from '@/shared/schemas/dashboard.schema';
 
 interface Lookup {
@@ -15,6 +16,10 @@ interface GlobalFilterBarProps {
   centrosCusto: Lookup[];
   categorias: Lookup[];
 }
+
+/** Faixa fina: no desktop os rótulos ficam à esquerda do controle (não acima),
+ * para a barra não roubar a altura que a referência dá aos cards e gráficos. */
+const CONTROL = 'h-9 min-w-0 max-w-full rounded-md border border-border bg-surface-2 px-2.5 text-[13px] text-ink outline-none focus-visible:border-brass';
 
 export function GlobalFilterBar({ filters, empresas, centrosCusto, categorias }: GlobalFilterBarProps) {
   const router = useRouter();
@@ -32,28 +37,18 @@ export function GlobalFilterBar({ filters, empresas, centrosCusto, categorias }:
   }
 
   return (
-    <div className="mb-5 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-3">
-      <Field label="Período (de)">
-        <input
-          type="date"
-          defaultValue={filters.periodoInicio ?? ''}
-          onChange={handleChange('periodoInicio')}
-          className="rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus-visible:border-brass"
-        />
+    <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-xl border border-border bg-surface px-4 py-2.5">
+      <Field label="De">
+        <input type="date" defaultValue={filters.periodoInicio ?? ''} onChange={handleChange('periodoInicio')} className={CONTROL} />
       </Field>
-      <Field label="Período (até)">
-        <input
-          type="date"
-          defaultValue={filters.periodoFim ?? ''}
-          onChange={handleChange('periodoFim')}
-          className="rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus-visible:border-brass"
-        />
+      <Field label="Até">
+        <input type="date" defaultValue={filters.periodoFim ?? ''} onChange={handleChange('periodoFim')} className={CONTROL} />
       </Field>
-      <Field label="Empresa/CNPJ">
+      <Field label="Empresa" className="w-full sm:w-auto">
         <select
           defaultValue={filters.empresaId ?? ''}
           onChange={handleChange('empresaId')}
-          className="rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus-visible:border-brass"
+          className={cn(CONTROL, 'w-full sm:w-32')}
         >
           <option value="">Todas</option>
           {empresas.map((empresa) => (
@@ -63,11 +58,11 @@ export function GlobalFilterBar({ filters, empresas, centrosCusto, categorias }:
           ))}
         </select>
       </Field>
-      <Field label="Centro de custo">
+      <Field label="Centro de custo" className="w-full sm:w-auto">
         <select
           defaultValue={filters.centroCustoId ?? ''}
           onChange={handleChange('centroCustoId')}
-          className="rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus-visible:border-brass"
+          className={cn(CONTROL, 'w-full sm:w-32')}
         >
           <option value="">Todos</option>
           {centrosCusto.map((centro) => (
@@ -77,11 +72,11 @@ export function GlobalFilterBar({ filters, empresas, centrosCusto, categorias }:
           ))}
         </select>
       </Field>
-      <Field label="Categoria">
+      <Field label="Categoria" className="w-full sm:w-auto">
         <select
           defaultValue={filters.categoriaId ?? ''}
           onChange={handleChange('categoriaId')}
-          className="rounded-lg border border-border bg-surface-2 px-2 py-1.5 text-sm text-ink outline-none focus-visible:border-brass"
+          className={cn(CONTROL, 'w-full sm:w-32')}
         >
           <option value="">Todas</option>
           {categorias.map((categoria) => (
@@ -92,14 +87,14 @@ export function GlobalFilterBar({ filters, empresas, centrosCusto, categorias }:
         </select>
       </Field>
       <Field label="Regime">
-        <div className="flex rounded-lg border border-border bg-surface-2 p-0.5 text-sm">
+        <div className="flex h-9 rounded-md border border-border bg-surface-2 p-0.5 text-[13px]">
           {(['caixa', 'competencia'] as const).map((regime) => (
             <button
               key={regime}
               type="button"
               onClick={() => updateParam('regime', regime)}
-              className={`rounded-md px-2.5 py-1 capitalize transition-colors ${
-                filters.regime === regime ? 'bg-brass text-bg' : 'text-muted hover:text-ink'
+              className={`rounded px-2.5 capitalize transition-colors ${
+                filters.regime === regime ? 'bg-brass font-medium text-white' : 'text-muted hover:text-ink'
               }`}
             >
               {regime}
@@ -111,10 +106,10 @@ export function GlobalFilterBar({ filters, empresas, centrosCusto, categorias }:
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-muted">
-      {label}
+    <label className={cn('flex min-w-0 max-w-full items-center gap-2', className)}>
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted">{label}</span>
       {children}
     </label>
   );

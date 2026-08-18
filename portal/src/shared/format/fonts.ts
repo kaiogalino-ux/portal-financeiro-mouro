@@ -15,5 +15,7 @@ export const fontSans = IBM_Plex_Sans({
 export const fontMono = IBM_Plex_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
-  weight: ['400', '500'],
+  // 600/700 servem os valores financeiros grandes dos cards de KPI — sem eles
+  // o navegador engorda o traço por conta própria e o número fica sujo.
+  weight: ['400', '500', '600', '700'],
 });

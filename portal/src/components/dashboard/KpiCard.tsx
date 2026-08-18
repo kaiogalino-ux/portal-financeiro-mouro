@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import {
+  ArrowDownToLine, ArrowUpFromLine, CalendarClock, Clock, Coins, Gauge, Landmark, Receipt, TrendingDown, TrendingUp,
+} from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 import { InfoTooltip } from '@/components/ui/Tooltip';
 import { Sheet } from '@/components/ui/Sheet';
 import { InlineErrorState, Skeleton } from '@/components/ui/States';
-import { formatBRL, formatPercent } from '@/shared/format/currency';
+import { formatBRL } from '@/shared/format/currency';
 import { formatMonthKeyLabel } from '@/shared/format/date';
 import type { DashboardFilters, KpiKey } from '@/shared/schemas/dashboard.schema';
 import type { DrilldownResult, KpiMesValor, KpiResult } from '@/shared/types/dashboard.types';
@@ -17,6 +19,24 @@ import { DrilldownTable } from './DrilldownTable';
  * resultadoDoPeriodo e saldoProjetado ganham cor por sinal; os demais são neutros. */
 const SIGNED_KEYS = new Set(['resultadoDoPeriodo', 'saldoProjetado']);
 const ALERT_KEYS = new Set(['titulosVencidos']);
+
+/** Ícone decorativo de cada card, no espírito da referência: seta pra dentro =
+ * dinheiro que entra, seta pra fora = dinheiro que sai. */
+const KPI_ICONS: Record<KpiKey, typeof TrendingUp> = {
+  recebidoAteHoje: ArrowDownToLine,
+  gastoAteHoje: ArrowUpFromLine,
+  totalAReceber: Landmark,
+  totalAPagar: Coins,
+  titulosVencidos: Clock,
+  faturamentoDoMes: Receipt,
+  receitasRealizadas: TrendingUp,
+  despesasRealizadas: TrendingDown,
+  resultadoDoPeriodo: Gauge,
+  saldoProjetado: CalendarClock,
+};
+
+/** O triângulo (▲/▼) já carrega o sinal — o número sai sem "+" para não duplicar. */
+const percentAbs = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1 });
 
 function buildQuery(filters: DashboardFilters, page: number): string {
   const params = new URLSearchParams();
@@ -66,34 +86,49 @@ export function KpiCard({
 
   const isAlert = ALERT_KEYS.has(result.key) && result.valor > 0;
   const valueColor = isAlert ? 'text-alert' : SIGNED_KEYS.has(result.key) && result.valor < 0 ? 'text-alert' : 'text-ink';
+  const Icon = KPI_ICONS[result.key];
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-1.5">
-            {KPI_LABELS[result.key]}
-            <InfoTooltip label={KPI_HELP[result.key]} />
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <button
-            type="button"
-            onClick={handleOpen}
-            className="w-full text-left"
-            aria-label={`Ver detalhes de ${KPI_LABELS[result.key]}`}
-          >
-            <p className={`font-display text-2xl font-medium ${valueColor}`}>{formatBRL(result.valor)}</p>
-          </button>
-          {porMes && porMes.length > 0 && <QuebraPorMes keyKpi={result.key} porMes={porMes} />}
-          <div className="mt-2 flex gap-3 text-xs">
-            <DeltaIndicator label="vs mês anterior" value={result.comparacaoMesAnterior} />
-            <DeltaIndicator label="vs ano anterior" value={result.comparacaoAnoAnterior} />
+      <Card className="group relative overflow-hidden transition-colors hover:border-brass/50">
+        <span className="absolute inset-y-0 left-0 w-1 bg-brass" aria-hidden="true" />
+        <div className="flex items-start gap-3 p-4 pl-[18px]">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-brass/25 bg-brass/10 text-brass">
+            <Icon size={21} strokeWidth={1.8} aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+              <span className="truncate">{KPI_LABELS[result.key]}</span>
+              <InfoTooltip label={KPI_HELP[result.key]} />
+            </p>
+            <button
+              type="button"
+              onClick={handleOpen}
+              className="mt-0.5 w-full text-left"
+              aria-label={`Ver detalhes de ${KPI_LABELS[result.key]}`}
+            >
+              <p className={`whitespace-nowrap font-mono-num text-[clamp(1.15rem,1.5vw,1.8rem)] font-bold leading-tight tracking-[-0.05em] ${valueColor}`}>
+                {formatBRL(result.valor)}
+              </p>
+            </button>
+            {result.comparacaoMesAnterior !== null && (
+              <p className="mt-1 flex items-baseline gap-1 text-xs">
+                <span className={result.comparacaoMesAnterior >= 0 ? 'text-favorable' : 'text-alert'}>
+                  <span aria-hidden="true">{result.comparacaoMesAnterior >= 0 ? '▲' : '▼'}</span>{' '}
+                  {percentAbs.format(Math.abs(result.comparacaoMesAnterior))}
+                </span>
+                <span className="text-muted">vs mês anterior</span>
+              </p>
+            )}
+            {porMes && porMes.length > 0 && <QuebraPorMes keyKpi={result.key} porMes={porMes} />}
+            {/* Só avisa quando os dados NÃO são reais. Confirmar a origem a cada
+                card era ruído (o normal é ser real), mas deixar número inventado
+                pelo MockErpAdapter passar por número de verdade, não. */}
+            {result.isSimulated && (
+              <p className="mt-1.5 text-[11px] uppercase tracking-wide text-alert">Dados simulados</p>
+            )}
           </div>
-          <p className="mt-2 text-[11px] uppercase tracking-wide text-muted/70">
-            {result.isSimulated ? 'Dados simulados' : 'Dados reais · Gestão Click'}
-          </p>
-        </CardContent>
+        </div>
       </Card>
 
       <Sheet
@@ -158,14 +193,14 @@ function QuebraPorMes({ keyKpi, porMes }: { keyKpi: KpiKey; porMes: KpiMesValor[
     const primeiro = formatMonthKeyLabel(porMes[0]!.mes);
     const ultimo = formatMonthKeyLabel(porMes[porMes.length - 1]!.mes);
     return (
-      <p className="mt-2 text-[11px] uppercase tracking-wide text-muted/70">
+      <p className="mt-1 text-[11px] uppercase tracking-wide text-muted/70">
         Vencimentos {primeiro === ultimo ? primeiro : `${primeiro} – ${ultimo}`}
       </p>
     );
   }
 
   return (
-    <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
+    <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
       {porMes.map(({ mes, valor }) => (
         <li key={mes} className="flex items-baseline gap-1">
           <span className="uppercase tracking-wide text-muted/70">{formatMonthKeyLabel(mes)}</span>
@@ -173,22 +208,5 @@ function QuebraPorMes({ keyKpi, porMes }: { keyKpi: KpiKey; porMes: KpiMesValor[
         </li>
       ))}
     </ul>
-  );
-}
-
-function DeltaIndicator({ label, value }: { label: string; value: number | null }) {
-  if (value === null) {
-    return (
-      <span className="flex items-center gap-1 text-muted">
-        <Minus size={12} /> {label}
-      </span>
-    );
-  }
-  const favorable = value >= 0;
-  return (
-    <span className={`flex items-center gap-1 ${favorable ? 'text-favorable' : 'text-alert'}`}>
-      {favorable ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-      {formatPercent(value)} {label}
-    </span>
   );
 }
