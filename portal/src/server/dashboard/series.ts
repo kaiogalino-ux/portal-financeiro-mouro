@@ -1,4 +1,4 @@
-import { addMonths, endOfMonth, format, startOfMonth, subMonths } from 'date-fns';
+import { addMonths, endOfMonth, format, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { prisma } from '@/server/db/prisma';
 import { withAuthz } from '@/server/data-access/withAuthz';
 import { formatMonthLabel, todayInSaoPaulo } from '@/shared/format/date';
@@ -70,7 +70,7 @@ export const getFluxoCaixaProjetado = withAuthz(
     }
 
     let saldoAcumulado = 0;
-    return Array.from(buckets.entries()).map(([key, bucket]) => {
+    const pontos = Array.from(buckets.entries()).map(([key, bucket]) => {
       saldoAcumulado += bucket.entradas - bucket.saidas;
       return {
         label: formatMonthLabel(`${key}-01`),
@@ -78,6 +78,73 @@ export const getFluxoCaixaProjetado = withAuthz(
         saidas: bucket.saidas,
         saldoAcumulado,
       };
+    });
+
+    // Mês sem nenhum título a receber cadastrado ainda não é "previsão de
+    // receita zero" — é ausência de dado (o ERP só emite a fatura perto do
+    // vencimento, enquanto compromissos fixos a pagar já entram com
+    // antecedência). Corta a cauda no último mês com alguma entrada, senão
+    // o saldo acumulado despenca por falta de dado, não por risco real.
+    let ultimoComEntrada = pontos.length - 1;
+    while (ultimoComEntrada > 0 && pontos[ultimoComEntrada]?.entradas === 0) {
+      ultimoComEntrada--;
+    }
+    return pontos.slice(0, ultimoComEntrada + 1);
+  },
+);
+
+/**
+ * Fluxo de caixa realizado do ano vigente, mês a mês — espelha exatamente a
+ * regra de `recebidoAteHoje`/`gastoAteHoje` (ver kpis.ts: `ateHojeDef`): só
+ * liquidado, por dataLiquidacao, de 01/01 do ano vigente até o fim do último
+ * mês fechado (o mês vigente nunca entra — pode receber baixas até acabar).
+ * A soma de todas as entradas aqui bate com "Receita (acumulada)"; a soma
+ * das saídas bate com "Despesas (acumulada)" — este gráfico é o
+ * detalhamento mês a mês do que esses dois KPIs somam num único número.
+ *
+ * Em janeiro (antes de qualquer mês do ano novo fechar), a janela fica
+ * vazia de propósito — mesma hora em que `recebidoAteHoje`/`gastoAteHoje`
+ * também zeram, porque ainda não existe nenhum mês fechado no ano vigente.
+ */
+export const getFluxoCaixaRealizadoAnoVigente = withAuthz(
+  'dashboard',
+  'read',
+  async (_session, filters: DashboardFilters): Promise<SeriesPoint[]> => {
+    const hoje = todayInSaoPaulo();
+    const inicio = startOfYear(hoje);
+    const fim = fimDoUltimoMesFechado(hoje);
+
+    const titulos =
+      inicio > fim
+        ? []
+        : await prisma.titulo.findMany({
+            where: {
+              ...buildTituloWhere(filters),
+              liquidado: true,
+              canceladoEm: null,
+              dataLiquidacao: { gte: inicio, lte: fim },
+            },
+            select: { tipo: true, valorTotal: true, dataLiquidacao: true },
+          });
+
+    const buckets = new Map<string, BucketAccum>();
+    for (let cursor = inicio; cursor <= fim; cursor = addMonths(cursor, 1)) {
+      buckets.set(monthKey(cursor), { entradas: 0, saidas: 0 });
+    }
+
+    for (const titulo of titulos) {
+      if (!titulo.dataLiquidacao) continue;
+      const bucket = buckets.get(monthKey(titulo.dataLiquidacao));
+      if (!bucket) continue;
+      const valor = Number(titulo.valorTotal.toString());
+      if (titulo.tipo === 'RECEBER') bucket.entradas += valor;
+      else bucket.saidas += valor;
+    }
+
+    let saldoAcumulado = 0;
+    return Array.from(buckets.entries()).map(([key, bucket]) => {
+      saldoAcumulado += bucket.entradas - bucket.saidas;
+      return { label: formatMonthLabel(`${key}-01`), ...bucket, saldoAcumulado };
     });
   },
 );

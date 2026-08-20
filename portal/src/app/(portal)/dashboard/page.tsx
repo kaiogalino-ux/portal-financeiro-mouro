@@ -1,7 +1,7 @@
 import { CalendarDays, Lock, Share2, ShieldCheck, Target, TrendingDown } from 'lucide-react';
 import { getKpi, getKpiPorMesVencimento } from '@/server/dashboard/kpis';
 import {
-  getFluxoCaixaProjetado, getIndicadoresPrevisao, getPrincipaisClientes,
+  getFluxoCaixaRealizadoAnoVigente, getIndicadoresPrevisao, getPrincipaisClientes,
   getPrincipaisFornecedores, getResultadoPorCentroCusto,
 } from '@/server/dashboard/series';
 import { listCategoriasLookup, listCentrosCustoLookup, listEmpresasLookup } from '@/server/data-access/lookups.repo';
@@ -51,7 +51,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     listCentrosCustoLookup(filters.empresaId),
     listCategoriasLookup(filters.empresaId),
     Promise.all(DASHBOARD_KPI_KEYS.map((key) => getKpi(key, filters))),
-    getFluxoCaixaProjetado(filters),
+    getFluxoCaixaRealizadoAnoVigente(filters),
     getPrincipaisClientes(filters),
     getPrincipaisFornecedores(filters),
     getResultadoPorCentroCusto(filters),
@@ -97,19 +97,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <Card>
           <CardHeader>
             <CardTitle>
-              Fluxo de caixa projetado <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">Próximos meses</span>
+              Fluxo de caixa <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">Realizado, ano vigente</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ComboBarLineChart data={fluxoCaixa} />
+            {fluxoCaixa.length ? <ComboBarLineChart data={fluxoCaixa} /> : <EmptyState />}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Saldo projetado</CardTitle>
+            <CardTitle>
+              Saldo acumulado <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">Realizado, ano vigente</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <AreaTrendChart data={fluxoCaixa} />
+            {fluxoCaixa.length ? <AreaTrendChart data={fluxoCaixa} /> : <EmptyState />}
           </CardContent>
         </Card>
       </div>
