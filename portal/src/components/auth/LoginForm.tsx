@@ -1,6 +1,7 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +11,7 @@ export function LoginForm() {
   const callbackUrl = searchParams.get('callbackUrl') ?? '/dashboard';
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const redefinida = searchParams.get('redefinida') === '1';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,6 +61,12 @@ export function LoginForm() {
           className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-ink outline-none focus-visible:border-brass"
         />
       </div>
+      <p className="text-right text-sm">
+        <Link href="/esqueci-senha" className="text-muted hover:text-brass">
+          Esqueci minha senha
+        </Link>
+      </p>
+      {redefinida && !erro && <p className="text-sm text-brass">Senha redefinida com sucesso. Faça login.</p>}
       {erro && <p className="text-sm text-alert">{erro}</p>}
       <Button type="submit" disabled={loading} className="w-full justify-center">
         {loading ? 'Entrando...' : 'Entrar'}

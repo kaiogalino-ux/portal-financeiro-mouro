@@ -55,8 +55,29 @@ model User {
   apiKeysCriadas  ApiKey[]  @relation("ApiKeyCriadaPor")
   impostosCriados     Imposto[] @relation("ImpostoCriadoPor")
   impostosConfirmados Imposto[] @relation("ImpostoConfirmadoPor")
+  passwordResetTokens PasswordResetToken[]
 
   @@map("usuarios")
+}
+
+/**
+ * Token de "esqueci a senha". Assim como `ApiKey.tokenHash`, o token em si
+ * nunca é armazenado — só o SHA-256 dele — porque é enviado por e-mail e
+ * qualquer vazamento do banco não pode virar acesso à conta. `usedAt` marca
+ * uso único: depois de consumido (ou expirado), o token não vale mais.
+ */
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 /**

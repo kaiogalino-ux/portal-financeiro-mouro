@@ -40,7 +40,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
 
-        const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+        // Login é case-insensitive por convenção de e-mail — `mode:
+        // 'insensitive'` casa "Financeiro@..." com "financeiro@..." sem
+        // depender de como o e-mail foi digitado no cadastro do usuário.
+        const user = await prisma.user.findFirst({
+          where: { email: { equals: parsed.data.email, mode: 'insensitive' } },
+        });
         if (!user || !user.active) return null;
 
         const valid = await verifyPassword(parsed.data.password, user.passwordHash);

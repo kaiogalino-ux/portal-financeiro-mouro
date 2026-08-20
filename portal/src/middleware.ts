@@ -6,7 +6,7 @@ import { auth } from '@/server/auth/auth';
 // a autorização real acontece no servidor, em withAuthz (ver src/server/data-access).
 export const runtime = 'nodejs';
 
-const PUBLIC_PATHS = ['/login'];
+const PUBLIC_PATHS = ['/login', '/esqueci-senha', '/redefinir-senha'];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
