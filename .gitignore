@@ -2,6 +2,9 @@ node_modules/
 .env
 .env.*.local
 
-# Relatórios gerados contêm dados financeiros reais da empresa — nunca versionar.
-relatorios/
+# Relatórios gerados contêm dados financeiros reais da empresa — nunca
+# versionar. Ancorado na raiz (barra inicial): sem isso, também ignorava
+# por engano portal/src/app/(portal)/relatorios/ — uma rota do site, não
+# um relatório gerado — e essa página nunca chegou a ser commitada.
+/relatorios/
 ~$*.xlsx
