@@ -1,7 +1,7 @@
 import { addMonths, endOfMonth, format, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { prisma } from '@/server/db/prisma';
 import { withAuthz } from '@/server/data-access/withAuthz';
-import { formatMonthLabel, todayInSaoPaulo } from '@/shared/format/date';
+import { formatMonthKeyLabel, todayInSaoPaulo } from '@/shared/format/date';
 import { formatBRL } from '@/shared/format/currency';
 import { fimDoUltimoMesFechado } from './period';
 
@@ -73,7 +73,7 @@ export const getFluxoCaixaProjetado = withAuthz(
     const pontos = Array.from(buckets.entries()).map(([key, bucket]) => {
       saldoAcumulado += bucket.entradas - bucket.saidas;
       return {
-        label: formatMonthLabel(`${key}-01`),
+        label: formatMonthKeyLabel(key),
         entradas: bucket.entradas,
         saidas: bucket.saidas,
         saldoAcumulado,
@@ -144,7 +144,7 @@ export const getFluxoCaixaRealizadoAnoVigente = withAuthz(
     let saldoAcumulado = 0;
     return Array.from(buckets.entries()).map(([key, bucket]) => {
       saldoAcumulado += bucket.entradas - bucket.saidas;
-      return { label: formatMonthLabel(`${key}-01`), ...bucket, saldoAcumulado };
+      return { label: formatMonthKeyLabel(key), ...bucket, saldoAcumulado };
     });
   },
 );
@@ -186,7 +186,7 @@ export const getEvolucaoMensalRealizada = withAuthz(
     let saldoAcumulado = 0;
     return Array.from(buckets.entries()).map(([key, bucket]) => {
       saldoAcumulado += bucket.entradas - bucket.saidas;
-      return { label: formatMonthLabel(`${key}-01`), ...bucket, saldoAcumulado };
+      return { label: formatMonthKeyLabel(key), ...bucket, saldoAcumulado };
     });
   },
 );
