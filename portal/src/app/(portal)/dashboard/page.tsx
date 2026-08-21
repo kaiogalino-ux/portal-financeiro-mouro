@@ -1,8 +1,8 @@
 import { CalendarDays, Lock, Share2, ShieldCheck, Target, TrendingDown } from 'lucide-react';
 import { getKpi, getKpiPorMesVencimento } from '@/server/dashboard/kpis';
 import {
-  getFluxoCaixaRealizadoAnoVigente, getIndicadoresPrevisao, getPrincipaisClientes,
-  getPrincipaisFornecedores, getResultadoPorCentroCusto,
+  getFluxoCaixaRealizadoAnoVigente, getIndicadoresPrevisao, getPrincipaisCentrosCustoReceber,
+  getPrincipaisCentrosCustoPagar, getResultadoPorCentroCusto,
 } from '@/server/dashboard/series';
 import { listCategoriasLookup, listCentrosCustoLookup, listEmpresasLookup } from '@/server/data-access/lookups.repo';
 import { dashboardFiltersSchema } from '@/shared/schemas/dashboard.schema';
@@ -41,8 +41,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     categorias,
     kpis,
     fluxoCaixa,
-    principaisClientes,
-    principaisFornecedores,
+    principaisCentrosCustoReceber,
+    principaisCentrosCustoPagar,
     resultadoPorCentro,
     indicadoresPrevisao,
     quebrasMensais,
@@ -52,8 +52,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     listCategoriasLookup(filters.empresaId),
     Promise.all(DASHBOARD_KPI_KEYS.map((key) => getKpi(key, filters))),
     getFluxoCaixaRealizadoAnoVigente(filters),
-    getPrincipaisClientes(filters),
-    getPrincipaisFornecedores(filters),
+    getPrincipaisCentrosCustoReceber(filters),
+    getPrincipaisCentrosCustoPagar(filters),
     getResultadoPorCentroCusto(filters),
     getIndicadoresPrevisao(filters),
     Promise.all(
@@ -120,21 +120,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <Card>
           <CardHeader>
             <CardTitle>
-              Principais clientes <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">A receber</span>
+              Centros de custo <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">A receber</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {principaisClientes.length ? <DonutChart data={principaisClientes} tone="favorable" /> : <EmptyState />}
+            {principaisCentrosCustoReceber.length ? <DonutChart data={principaisCentrosCustoReceber} tone="favorable" /> : <EmptyState />}
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>
-              Principais fornecedores <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">A pagar</span>
+              Centros de custo <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">A pagar</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {principaisFornecedores.length ? <DonutChart data={principaisFornecedores} tone="alert" /> : <EmptyState />}
+            {principaisCentrosCustoPagar.length ? <DonutChart data={principaisCentrosCustoPagar} tone="alert" /> : <EmptyState />}
           </CardContent>
         </Card>
         <Card>

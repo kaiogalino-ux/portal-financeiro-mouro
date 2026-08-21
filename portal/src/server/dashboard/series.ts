@@ -200,37 +200,44 @@ function toDonutSlices(entries: Array<{ nome: string; valor: number }>, limite =
   return resultado.map((e) => ({ nome: e.nome, valor: e.valor, percentual: total > 0 ? e.valor / total : 0 }));
 }
 
-export const getPrincipaisClientes = withAuthz(
+/**
+ * Agrupado por centro de custo, não por cliente/fornecedor: o vínculo
+ * cliente/fornecedor vindo do GestãoClick é pouco ou nada preenchido em boa
+ * parte dos títulos (cai quase tudo em "Sem cliente/fornecedor
+ * identificado"), enquanto centro de custo é o campo que de fato chega
+ * populado e é útil pra diretoria.
+ */
+export const getPrincipaisCentrosCustoReceber = withAuthz(
   'dashboard',
   'read',
   async (_session, filters: DashboardFilters): Promise<DonutSlice[]> => {
     const titulos = await prisma.titulo.findMany({
       where: { ...buildTituloWhere(filters, { tipo: 'RECEBER', aplicarPeriodo: true }) },
-      select: { valorTotal: true, cliente: { select: { nome: true } } },
+      select: { valorTotal: true, centroCusto: { select: { nome: true } } },
     });
-    const porCliente = new Map<string, number>();
+    const porCentro = new Map<string, number>();
     for (const t of titulos) {
-      const nome = t.cliente?.nome ?? 'Sem cliente identificado';
-      porCliente.set(nome, (porCliente.get(nome) ?? 0) + Number(t.valorTotal.toString()));
+      const nome = t.centroCusto?.nome ?? 'Sem centro de custo';
+      porCentro.set(nome, (porCentro.get(nome) ?? 0) + Number(t.valorTotal.toString()));
     }
-    return toDonutSlices(Array.from(porCliente.entries()).map(([nome, valor]) => ({ nome, valor })));
+    return toDonutSlices(Array.from(porCentro.entries()).map(([nome, valor]) => ({ nome, valor })));
   },
 );
 
-export const getPrincipaisFornecedores = withAuthz(
+export const getPrincipaisCentrosCustoPagar = withAuthz(
   'dashboard',
   'read',
   async (_session, filters: DashboardFilters): Promise<DonutSlice[]> => {
     const titulos = await prisma.titulo.findMany({
       where: { ...buildTituloWhere(filters, { tipo: 'PAGAR', aplicarPeriodo: true }) },
-      select: { valorTotal: true, fornecedor: { select: { nome: true } } },
+      select: { valorTotal: true, centroCusto: { select: { nome: true } } },
     });
-    const porFornecedor = new Map<string, number>();
+    const porCentro = new Map<string, number>();
     for (const t of titulos) {
-      const nome = t.fornecedor?.nome ?? 'Sem fornecedor identificado';
-      porFornecedor.set(nome, (porFornecedor.get(nome) ?? 0) + Number(t.valorTotal.toString()));
+      const nome = t.centroCusto?.nome ?? 'Sem centro de custo';
+      porCentro.set(nome, (porCentro.get(nome) ?? 0) + Number(t.valorTotal.toString()));
     }
-    return toDonutSlices(Array.from(porFornecedor.entries()).map(([nome, valor]) => ({ nome, valor })));
+    return toDonutSlices(Array.from(porCentro.entries()).map(([nome, valor]) => ({ nome, valor })));
   },
 );
 
