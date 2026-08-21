@@ -206,39 +206,38 @@ function toDonutSlices(entries: Array<{ nome: string; valor: number }>, limite =
  * parte dos títulos (cai quase tudo em "Sem cliente/fornecedor
  * identificado"), enquanto centro de custo é o campo que de fato chega
  * populado e é útil pra diretoria.
+ *
+ * Mesma regra de "Receita/Despesas (acumulada)" e do fluxo de caixa
+ * realizado (ver `ateHojeDef` em kpis.ts e `getFluxoCaixaRealizadoAnoVigente`
+ * acima): só liquidado, por dataLiquidacao, de 01/01 do ano vigente até o
+ * fim do último mês fechado — pra esses donuts baterem com os dois cards
+ * de acumulado, não com um recorte diferente.
  */
-export const getPrincipaisCentrosCustoReceber = withAuthz(
-  'dashboard',
-  'read',
-  async (_session, filters: DashboardFilters): Promise<DonutSlice[]> => {
-    const titulos = await prisma.titulo.findMany({
-      where: { ...buildTituloWhere(filters, { tipo: 'RECEBER', aplicarPeriodo: true }) },
-      select: { valorTotal: true, centroCusto: { select: { nome: true } } },
-    });
-    const porCentro = new Map<string, number>();
-    for (const t of titulos) {
-      const nome = t.centroCusto?.nome ?? 'Sem centro de custo';
-      porCentro.set(nome, (porCentro.get(nome) ?? 0) + Number(t.valorTotal.toString()));
-    }
-    return toDonutSlices(Array.from(porCentro.entries()).map(([nome, valor]) => ({ nome, valor })));
-  },
+async function porCentroCusto(filters: DashboardFilters, tipo: 'RECEBER' | 'PAGAR'): Promise<DonutSlice[]> {
+  const hoje = todayInSaoPaulo();
+  const titulos = await prisma.titulo.findMany({
+    where: {
+      ...buildTituloWhere(filters, { tipo }),
+      liquidado: true,
+      canceladoEm: null,
+      dataLiquidacao: { gte: startOfYear(hoje), lte: fimDoUltimoMesFechado(hoje) },
+    },
+    select: { valorTotal: true, centroCusto: { select: { nome: true } } },
+  });
+  const porCentro = new Map<string, number>();
+  for (const t of titulos) {
+    const nome = t.centroCusto?.nome ?? 'Sem centro de custo';
+    porCentro.set(nome, (porCentro.get(nome) ?? 0) + Number(t.valorTotal.toString()));
+  }
+  return toDonutSlices(Array.from(porCentro.entries()).map(([nome, valor]) => ({ nome, valor })));
+}
+
+export const getPrincipaisCentrosCustoReceber = withAuthz('dashboard', 'read', (_session, filters: DashboardFilters) =>
+  porCentroCusto(filters, 'RECEBER'),
 );
 
-export const getPrincipaisCentrosCustoPagar = withAuthz(
-  'dashboard',
-  'read',
-  async (_session, filters: DashboardFilters): Promise<DonutSlice[]> => {
-    const titulos = await prisma.titulo.findMany({
-      where: { ...buildTituloWhere(filters, { tipo: 'PAGAR', aplicarPeriodo: true }) },
-      select: { valorTotal: true, centroCusto: { select: { nome: true } } },
-    });
-    const porCentro = new Map<string, number>();
-    for (const t of titulos) {
-      const nome = t.centroCusto?.nome ?? 'Sem centro de custo';
-      porCentro.set(nome, (porCentro.get(nome) ?? 0) + Number(t.valorTotal.toString()));
-    }
-    return toDonutSlices(Array.from(porCentro.entries()).map(([nome, valor]) => ({ nome, valor })));
-  },
+export const getPrincipaisCentrosCustoPagar = withAuthz('dashboard', 'read', (_session, filters: DashboardFilters) =>
+  porCentroCusto(filters, 'PAGAR'),
 );
 
 export const getResultadoPorCentroCusto = withAuthz(
