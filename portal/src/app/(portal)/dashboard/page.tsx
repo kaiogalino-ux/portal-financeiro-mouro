@@ -150,7 +150,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       <div className="mt-4">
         <Card>
           <CardHeader>
-            <CardTitle>Resultado por centro de custo (realizado no período)</CardTitle>
+            <CardTitle>
+              Resultado por centro de custo <span className="ml-1 font-sans text-[10px] font-semibold tracking-[0.06em] text-muted">Realizado, ano vigente</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {resultadoPorCentro.length ? (

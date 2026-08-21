@@ -240,13 +240,24 @@ export const getPrincipaisCentrosCustoPagar = withAuthz('dashboard', 'read', (_s
   porCentroCusto(filters, 'PAGAR'),
 );
 
+/**
+ * Mesma regra de "Receita/Despesas (acumulada)" e dos donuts de centro de
+ * custo (ver `porCentroCusto` acima): só liquidado, por dataLiquidacao, de
+ * 01/01 do ano vigente até o fim do último mês fechado — pra este quadro
+ * bater com os outros, não com um recorte de período diferente.
+ */
 export const getResultadoPorCentroCusto = withAuthz(
   'dashboard',
   'read',
   async (_session, filters: DashboardFilters): Promise<Array<{ nome: string; resultado: number }>> => {
-    const campoData = filters.regime === 'caixa' ? 'dataLiquidacao' : 'dataCompetencia';
+    const hoje = todayInSaoPaulo();
     const titulos = await prisma.titulo.findMany({
-      where: { ...buildTituloWhere(filters, { aplicarPeriodo: true, campoData }), liquidado: true },
+      where: {
+        ...buildTituloWhere(filters),
+        liquidado: true,
+        canceladoEm: null,
+        dataLiquidacao: { gte: startOfYear(hoje), lte: fimDoUltimoMesFechado(hoje) },
+      },
       select: { tipo: true, valorTotal: true, centroCusto: { select: { nome: true } } },
     });
     const porCentro = new Map<string, number>();
